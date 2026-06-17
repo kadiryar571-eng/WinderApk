@@ -602,148 +602,335 @@ function renderHome() {
   `, bottomNav("home"));
 }
 
-/* NEARBY — Leaflet.js gerçek harita */
+/* NEARBY — Opportunity Discovery Map */
 let _leafletMap = null;
 let _leafletMarkers = {};
+let _mapRouteLayer = null;
+let _mapDistanceRings = [];
 
 function renderNearby() {
+  if (!state.sheetState) state.sheetState = "peek";
+  const sheetCls = state.sheetState === "mid" ? " sheet-mid"
+    : state.sheetState === "expanded" ? " sheet-expanded" : "";
+  const nearby  = [...jobs].sort((a,b) => a.distance - b.distance);
+  const sorted  = [...jobs].sort((a,b) => b.matchScore - a.matchScore);
+  const bestPct = Math.max(...jobs.map(j => j.matchScore));
+
   return screen(`
-    <div class="map-overlay-top">
-      <div class="map-search-row">
-        <button class="topbar-action" onclick="go('home')" style="flex-shrink:0">${icon("ti-arrow-left")}</button>
-        <div class="map-search">
-          ${icon("ti-search")}
-          <input type="search" id="map-search-input" placeholder="Kadıköy'de iş ara..."
-            oninput="filterMapJobs(this.value)">
-        </div>
-        <button class="topbar-action" style="flex-shrink:0" onclick="centerMapOnUser()">${icon("ti-map-pin")}</button>
+    <div class="map-wrap">
+      <div id="leaflet-map" class="map-full"></div>
+
+      <!-- ETA banner -->
+      <div class="map-eta-banner" id="map-eta-banner"
+        style="display:${state.selectedPin ? "flex" : "none"}">
+        <span id="map-eta-text">♟ ${(() => { const j = jobs.find(x=>x.id===state.selectedPin); return j ? j.travel[state.dirMode||"walk"]+" dk" : ""; })()}</span>
+        <button onclick="deselectMapPin()">✕</button>
       </div>
-      <div class="map-chips">
-        <div class="chip active" onclick="filterMapType(this,'')">Tümü</div>
-        <div class="chip" onclick="filterMapType(this,'Yarı zamanlı')">Yarı zamanlı</div>
-        <div class="chip" onclick="filterMapType(this,'Tam zamanlı')">Tam zamanlı</div>
-        <div class="chip" onclick="filterMapType(this,'Serbest')">Serbest</div>
+
+      <!-- Top overlay -->
+      <div class="map-overlay-top">
+        <div class="map-search-row">
+          <button class="topbar-action" onclick="go('home')" style="flex-shrink:0">${icon("ti-arrow-left")}</button>
+          <div class="map-search">
+            ${icon("ti-search")}
+            <input type="search" id="map-search-input" placeholder="Kadıköy'de iş ara..."
+              oninput="filterMapSearch(this.value)">
+          </div>
+          <button class="topbar-action" id="map-locate-btn" onclick="centerMapOnUser()" style="flex-shrink:0">${icon("ti-map-pin")}</button>
+        </div>
+        <div class="map-chips" id="map-filter-chips">
+          <div class="chip active" onclick="setMapTypeFilter(this,'')">Tümü</div>
+          <div class="chip" onclick="setMapTypeFilter(this,'Yarı zamanlı')">Yarı zamanlı</div>
+          <div class="chip" onclick="setMapTypeFilter(this,'Tam zamanlı')">Tam zamanlı</div>
+          <div class="chip" onclick="setMapTypeFilter(this,'Serbest')">Serbest</div>
+        </div>
+      </div>
+
+      <!-- Bottom Sheet -->
+      <div class="map-sheet${sheetCls}" id="map-sheet">
+        <div class="map-sheet-handle" onclick="cycleSheetState()">
+          <div class="sheet-handle"></div>
+        </div>
+
+        <!-- PEEK layer -->
+        <div class="ms-layer ms-peek">
+          <button class="sheet-insights" onclick="setSheetState('expanded')">
+            <span class="si-dot"></span>
+            <span id="sheet-insight-text">
+              <strong>${jobs.length}</strong> fırsat &middot;
+              En yakın <strong>${nearby[0].distance} km</strong> &middot;
+              En iyi <strong>${bestPct}%</strong>
+            </span>
+            <span class="si-arr">↑</span>
+          </button>
+          <div class="h-scroll" style="padding:0 14px 12px">
+            <div class="mini-filter-chip active" onclick="setSortMode(this,'match')">✦ En İyi Uyum</div>
+            <div class="mini-filter-chip" onclick="setSortMode(this,'distance')">📍 En Yakın</div>
+            <div class="mini-filter-chip" onclick="setSortMode(this,'new')">◎ Yeni</div>
+            <div class="mini-filter-chip" onclick="setSortMode(this,'salary')">₺ Ücret</div>
+          </div>
+        </div>
+
+        <!-- MID layer -->
+        <div class="ms-layer ms-mid">
+          <div id="sheet-selected-card">
+            ${state.selectedPin
+              ? mapDetailCard(jobs.find(j => j.id === state.selectedPin))
+              : mapBrowseCard()}
+          </div>
+          <div class="sheet-nearby-row">
+            <p class="sheet-nearby-label">Diğer fırsatlar →</p>
+            <div class="h-scroll" id="sheet-nearby-cards">
+              ${nearby.map(j => sheetMiniCard(j)).join("")}
+            </div>
+          </div>
+        </div>
+
+        <!-- EXPANDED layer -->
+        <div class="ms-layer ms-expanded">
+          <div class="ms-exp-header">
+            <span id="sheet-exp-count">${jobs.length} fırsat · Kadıköy</span>
+            <button class="ms-exp-close" onclick="setSheetState('peek')">${icon("ti-x")}</button>
+          </div>
+          <div class="ms-exp-list" id="sheet-full-list">
+            ${sorted.map(j => mapListRow(j)).join("")}
+          </div>
+        </div>
       </div>
     </div>
-
-    <div id="leaflet-map" style="flex:1;position:relative;z-index:0"></div>
-
-    <div class="bottom-sheet${state.sheetExpanded ? " expanded" : ""}" id="map-sheet" style="position:absolute;bottom:0;left:0;right:0;z-index:25">
-      <div class="sheet-handle-area" onclick="toggleSheet()">
-        <div class="sheet-handle"></div>
-        <div class="sheet-header">
-          <span class="sheet-title">Yakınındaki Fırsatlar</span>
-          <span class="sheet-count" id="sheet-job-count">${jobs.length} ilan</span>
-        </div>
-      </div>
-      <div class="sheet-cards" id="sheet-cards">
-        ${jobs.map(j => sheetCard(j)).join("")}
-      </div>
-    </div>`, bottomNav("nearby"));
+  `, bottomNav("nearby"));
 }
 
+/* ─── MAP CARD COMPONENTS ────────────────────────────────────────── */
+
+function mapDetailCard(job) {
+  if (!job) return mapBrowseCard();
+  const circ = 2 * Math.PI * 18;
+  const fill = (job.matchScore / 100) * circ;
+  const mode = state.dirMode || "walk";
+  return `<div class="map-detail-card">
+    <div class="mdc-header">
+      <div class="mdc-avatar" style="background:rgba(${job.hue},.2);color:rgba(${job.hue},1)">${job.initials}</div>
+      <div class="mdc-info">
+        <h3 class="mdc-role">${job.title}</h3>
+        <p class="mdc-co">${job.company}</p>
+      </div>
+      <div class="mdc-ring">
+        <svg viewBox="0 0 48 48" style="transform:rotate(-90deg)">
+          <circle cx="24" cy="24" r="18" fill="none" stroke="var(--surface-3)" stroke-width="4"/>
+          <circle cx="24" cy="24" r="18" fill="none" stroke="${scoreColor(job.matchScore)}" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"/>
+        </svg>
+        <div class="mdc-ring-num">${job.matchScore}%</div>
+      </div>
+      <button class="mdc-close" onclick="deselectMapPin()">✕</button>
+    </div>
+    <div class="mdc-travel-tabs">
+      <button class="travel-tab${mode==="walk"?" active":""}" data-mode="walk" onclick="setMapRouteMode('walk')">${icon("ti-walk")} ${job.travel.walk} dk</button>
+      <button class="travel-tab${mode==="bus"?" active":""}" data-mode="bus"  onclick="setMapRouteMode('bus')">${icon("ti-bus")} ${job.travel.bus} dk</button>
+      <button class="travel-tab${mode==="car"?" active":""}" data-mode="car"  onclick="setMapRouteMode('car')">${icon("ti-car")} ${job.travel.car} dk</button>
+    </div>
+    <div class="mdc-kpis">
+      <div class="mdc-kpi"><span class="mdc-kv">${job.sal.cur}${job.sal.min}–${job.sal.max}</span><span class="mdc-kl">/${job.sal.per}</span></div>
+      <div class="mdc-sep"></div>
+      <div class="mdc-kpi"><span class="mdc-kv">${job.distance} km</span><span class="mdc-kl">mesafe</span></div>
+      <div class="mdc-sep"></div>
+      <div class="mdc-kpi"><span class="mdc-kv" style="font-size:11px">${job.type}</span><span class="mdc-kl">çalışma</span></div>
+    </div>
+    <p class="mdc-desc">${job.desc.slice(0, 78)}…</p>
+    <div class="mdc-actions">
+      <button class="btn btn-ghost btn-sm" onclick="go('navigation')">Yol Tarifi</button>
+      <button class="btn btn-primary" style="flex:1;height:40px;font-size:13px;border-radius:12px" onclick="openJob(${job.id},'nearby')">Detayları Gör →</button>
+    </div>
+  </div>`;
+}
+
+function mapBrowseCard() {
+  return `<div class="map-browse-prompt">
+    <div class="mbp-icon">◉</div>
+    <p class="mbp-text">Haritadan bir fırsat seçin<br>veya aşağıyı kaydırın</p>
+    <button class="btn btn-ghost btn-sm" onclick="setSheetState('expanded')">Tüm Fırsatları Gör →</button>
+  </div>`;
+}
+
+function sheetMiniCard(job) {
+  const active = state.selectedPin === job.id;
+  return `<div class="sheet-mini-card${active ? " smc-active" : ""}" onclick="selectMapPin(${job.id})">
+    <div class="smc-avatar" style="background:rgba(${job.hue},.2);color:rgba(${job.hue},1)">${job.initials}</div>
+    <h4 class="smc-role">${job.title}</h4>
+    <p class="smc-dist">${icon("ti-map-pin")} ${job.distance} km</p>
+    <p class="smc-walk">${icon("ti-walk")} ${job.travel.walk} dk</p>
+    <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+  </div>`;
+}
+
+function mapListRow(job) {
+  return `<div class="job-row" onclick="selectMapPin(${job.id});setSheetState('mid')">
+    <div class="job-row-avatar" style="background:rgba(${job.hue},.15);color:rgba(${job.hue},1)">${job.initials}</div>
+    <div class="job-row-body">
+      <h3>${job.title}</h3>
+      <p class="co">${job.company}</p>
+      <div class="job-row-meta">
+        <span>${icon("ti-map-pin")} ${job.distance} km</span>
+        <span>${icon("ti-walk")} ${job.travel.walk} dk</span>
+        <span>${job.type}</span>
+      </div>
+    </div>
+    <div class="job-row-right">
+      <span class="job-row-sal">${job.sal.cur}${job.sal.min}<span>/${job.sal.per}</span></span>
+      <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+    </div>
+  </div>`;
+}
+
+/* ─── MAP INIT ───────────────────────────────────────────────────── */
+
 function initLeafletMap() {
-  if (!window.L) return;          // Leaflet CDN yüklenmediyse çık
+  if (!window.L) return;
   const el = document.getElementById("leaflet-map");
   if (!el) return;
-
-  // Önceki haritayı temizle
   if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
   _leafletMarkers = {};
+  _mapRouteLayer = null;
 
-  // Kadıköy merkezi
   const center = [40.9906, 29.0250];
   _leafletMap = L.map("leaflet-map", {
     center, zoom: 15,
-    zoomControl: true,
-    attributionControl: false,
+    zoomControl: false, attributionControl: false,
   });
 
-  // OpenStreetMap tiles
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 20,
   }).addTo(_leafletMap);
 
-  // Kullanıcı konumu (Leaflet divIcon)
-  const userIcon = L.divIcon({
-    html: '<div class="mw-user-pin"></div>',
-    className: "", iconSize: [16,16], iconAnchor: [8,8],
-  });
-  L.marker(center, { icon: userIcon, zIndexOffset: 1000 }).addTo(_leafletMap);
+  // Distance rings
+  _mapDistanceRings.forEach(r => { try { r.remove(); } catch(_) {} });
+  _mapDistanceRings = [
+    L.circle(center, { radius:500,  color:"#6C4EFF", opacity:.45, weight:1.5, fill:false, dashArray:"5 5" }),
+    L.circle(center, { radius:1000, color:"#6C4EFF", opacity:.28, weight:1,   fill:false, dashArray:"3 7" }),
+    L.circle(center, { radius:2000, color:"#6C4EFF", opacity:.14, weight:1,   fill:false, dashArray:"2 9" }),
+  ];
+  _mapDistanceRings.forEach(r => r.addTo(_leafletMap));
 
-  // Konum al → haritayı gerçek konuma taşı
+  // User location pin
+  const userIcon = L.divIcon({
+    html: `<div class="lpin-user"><div class="lpu-dot"></div><div class="lpu-ring"></div></div>`,
+    className: "", iconSize:[36,36], iconAnchor:[18,18],
+  });
+  L.marker(center, { icon: userIcon, zIndexOffset:1000 }).addTo(_leafletMap);
+
   if (window.MW?.Location) {
     window.MW.Location.get().then(loc => {
-      if (loc) _leafletMap?.setView([loc.lat, loc.lng], 15);
+      if (loc && _leafletMap) _leafletMap.setView([loc.lat, loc.lng], 15);
     });
   }
 
-  // İş pinlerini ekle
+  _leafletMap.on("click", () => { if (state.selectedPin) deselectMapPin(); });
   addJobPinsToMap(jobs);
 }
 
 function addJobPinsToMap(jobList) {
   if (!_leafletMap || !window.L) return;
-
-  // Eski pinleri temizle
   Object.values(_leafletMarkers).forEach(m => m.remove());
   _leafletMarkers = {};
 
   jobList.forEach(job => {
-    const tier = job.matchScore >= 85 ? "high" : job.matchScore >= 70 ? "mid" : "low";
-    const icon = L.divIcon({
-      html: `<div class="mw-pin ${tier}" id="lpin-${job.id}">${job.matchScore}%</div>`,
-      className: "", iconSize: null, iconAnchor: [22, 32],
+    const tier   = job.matchScore >= 85 ? "high" : job.matchScore >= 70 ? "mid" : "low";
+    const isSel  = state.selectedPin === job.id;
+    const isDim  = state.selectedPin && !isSel;
+    const licon  = L.divIcon({
+      html: `<div class="lpin-wrap lpin-${tier}${isSel?" lpin-sel":""}${isDim?" lpin-dim":""}" id="lpin-${job.id}">
+        <div class="lpin-circle">${job.initials}</div>
+        <div class="lpin-tail"></div>
+        <div class="lpin-score">${job.matchScore}%</div>
+      </div>`,
+      className: "", iconSize:null, iconAnchor:[20,46],
     });
 
     const lat = job.pin?.lat || (40.9906 + (job.pin?.y - 50) * 0.002);
     const lng = job.pin?.lng || (29.0250 + (job.pin?.x - 50) * 0.003);
 
-    const marker = L.marker([lat, lng], { icon })
+    const marker = L.marker([lat, lng], { icon: licon })
       .addTo(_leafletMap)
-      .on("click", () => selectPin(job.id));
+      .on("click", e => { L.DomEvent.stopPropagation(e); selectMapPin(job.id); });
 
     _leafletMarkers[job.id] = marker;
   });
 }
 
 function centerMapOnUser() {
-  if (!_leafletMap || !window.MW?.Location) return;
-  window.MW.Location.get().then(loc => {
-    if (loc) _leafletMap.flyTo([loc.lat, loc.lng], 15, { duration: 0.8 });
-  });
+  if (!_leafletMap) return;
+  const btn = document.getElementById("map-locate-btn");
+  if (btn) btn.style.opacity = ".5";
+  const done = () => { if (btn) btn.style.opacity = ""; };
+  if (window.MW?.Location) {
+    window.MW.Location.get().then(loc => {
+      if (loc) _leafletMap?.flyTo([loc.lat, loc.lng], 15, { duration: 0.8 });
+      done();
+    });
+  } else {
+    _leafletMap.flyTo([40.9906, 29.0250], 15, { duration: 0.8 });
+    setTimeout(done, 900);
+  }
 }
 
-function filterMapJobs(q) {
-  const filtered = q
-    ? jobs.filter(j => j.title.toLowerCase().includes(q.toLowerCase()) || j.company.toLowerCase().includes(q.toLowerCase()))
-    : jobs;
-  addJobPinsToMap(filtered);
-  const cards = document.getElementById("sheet-cards");
-  const count = document.getElementById("sheet-job-count");
-  if (cards) cards.innerHTML = filtered.map(j => sheetCard(j)).join("");
-  if (count) count.textContent = `${filtered.length} ilan`;
+function filterMapSearch(q) {
+  state.mapSearchQ = q;
+  applyMapFilters();
 }
 
-function filterMapType(btn, type) {
-  document.querySelectorAll(".map-chips .chip").forEach(c => c.classList.remove("active"));
+function setMapTypeFilter(btn, type) {
+  document.querySelectorAll("#map-filter-chips .chip").forEach(c => c.classList.remove("active"));
   btn.classList.add("active");
-  const filtered = type ? jobs.filter(j => j.type === type) : jobs;
+  state.mapTypeFilter = type;
+  applyMapFilters();
+}
+
+function applyMapFilters() {
+  const q    = (state.mapSearchQ || "").toLowerCase();
+  const type = state.mapTypeFilter || "";
+  const filtered = jobs.filter(j =>
+    (!q    || j.title.toLowerCase().includes(q) || j.company.toLowerCase().includes(q)) &&
+    (!type || j.type === type)
+  );
   addJobPinsToMap(filtered);
-  const cards = document.getElementById("sheet-cards");
-  const count = document.getElementById("sheet-job-count");
-  if (cards) cards.innerHTML = filtered.map(j => sheetCard(j)).join("");
-  if (count) count.textContent = `${filtered.length} ilan`;
+  const sorted  = sortMapJobs(filtered);
+  const listEl  = document.getElementById("sheet-full-list");
+  if (listEl) listEl.innerHTML = sorted.map(j => mapListRow(j)).join("");
+  const nearbyEl = document.getElementById("sheet-nearby-cards");
+  if (nearbyEl) nearbyEl.innerHTML = [...filtered].sort((a,b)=>a.distance-b.distance).map(j=>sheetMiniCard(j)).join("");
+  updateSheetInsights(filtered);
+}
+
+function sortMapJobs(list) {
+  const arr = [...list];
+  const m = state.mapSortMode || "match";
+  if (m === "distance") return arr.sort((a,b) => a.distance - b.distance);
+  if (m === "new")      return arr.sort((a,b) => b.id - a.id);
+  if (m === "salary")   return arr.sort((a,b) => b.sal.min - a.sal.min);
+  return arr.sort((a,b) => b.matchScore - a.matchScore);
+}
+
+function setSortMode(btn, mode) {
+  state.mapSortMode = mode;
+  document.querySelectorAll(".mini-filter-chip").forEach(c => c.classList.remove("active"));
+  btn.classList.add("active");
+  applyMapFilters();
+}
+
+function updateSheetInsights(list) {
+  const el = document.getElementById("sheet-insight-text");
+  if (!el || !list.length) return;
+  const near = [...list].sort((a,b)=>a.distance-b.distance)[0];
+  const best = Math.max(...list.map(j=>j.matchScore));
+  el.innerHTML = `<strong>${list.length}</strong> fırsat &middot; En yakın <strong>${near.distance} km</strong> &middot; En iyi <strong>${best}%</strong>`;
 }
 
 function sheetCard(job) {
   const active = state.selectedPin === job.id ? " active" : "";
   return `<div class="sheet-card${active}" onclick="openJob(${job.id},'nearby')">
     <div class="sheet-card-top">
-      <div>
-        <h3>${job.title}</h3>
-        <p class="co">${job.company}</p>
-      </div>
+      <div><h3>${job.title}</h3><p class="co">${job.company}</p></div>
       <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
     </div>
     <div class="sheet-card-meta">
@@ -2398,12 +2585,16 @@ function render() {
     });
   }
   if (route === "nearby") {
-    // Leaflet haritayı başlat (DOM hazır olduğunda)
     requestAnimationFrame(() => {
       initLeafletMap();
-      if (state.sheetExpanded) {
-        const sheet = document.getElementById("map-sheet");
-        if (sheet) sheet.classList.add("expanded");
+      // Restore sheet state
+      const sheet = document.getElementById("map-sheet");
+      if (sheet && state.sheetState === "mid") sheet.classList.add("sheet-mid");
+      else if (sheet && state.sheetState === "expanded") sheet.classList.add("sheet-expanded");
+      // Restore selected pin route if any
+      if (state.selectedPin) {
+        const job = jobs.find(j => j.id === state.selectedPin);
+        if (job) drawMapRoute(job);
       }
     });
   }
@@ -2599,41 +2790,115 @@ function playSwipeSound(dir) {
 }
 
 /* ─── INTERACTION HANDLERS ───────────────────────────────────────── */
-function selectPin(jobId) {
-  state.selectedPin = jobId;
+/* ─── MAP INTERACTION ────────────────────────────────────────────── */
 
-  // Leaflet pin görselini güncelle
-  document.querySelectorAll(".mw-pin").forEach(p => p.classList.remove("selected"));
-  const lpinEl = document.getElementById(`lpin-${jobId}`);
-  if (lpinEl) lpinEl.classList.add("selected");
-
-  // Bottom sheet'i aç
+function setSheetState(s) {
+  state.sheetState = s;
   const sheet = document.getElementById("map-sheet");
-  if (sheet) sheet.classList.add("expanded");
-  state.sheetExpanded = true;
+  if (!sheet) return;
+  sheet.className = "map-sheet" +
+    (s === "mid" ? " sheet-mid" : s === "expanded" ? " sheet-expanded" : "");
+}
 
-  // Sheet kartında seçili ilanı öne kaydır
-  const cards = document.getElementById("sheet-cards");
-  if (cards) {
-    const idx = jobs.findIndex(j => j.id === jobId);
-    const target = cards.children[idx];
-    if (target) target.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    // Aktif kartı vurgula
-    Array.from(cards.children).forEach((c, i) => c.classList.toggle("active", i === idx));
-  }
+function cycleSheetState() {
+  const s = state.sheetState || "peek";
+  setSheetState(s === "peek" ? "expanded" : "peek");
+}
 
-  // Leaflet haritayı o konuma taşı
+function selectMapPin(jobId) {
+  state.selectedPin = jobId;
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  // Update selected card HTML
+  const cardEl = document.getElementById("sheet-selected-card");
+  if (cardEl) cardEl.innerHTML = mapDetailCard(job);
+
+  // Slide sheet to mid
+  setSheetState("mid");
+
+  // Update pin visual states
+  jobs.forEach(j => {
+    const el = document.getElementById(`lpin-${j.id}`);
+    if (!el) return;
+    el.classList.toggle("lpin-sel", j.id === jobId);
+    el.classList.toggle("lpin-dim", j.id !== jobId);
+  });
+
+  // Draw route
+  drawMapRoute(job);
+
+  // Pan map to center between user and pin
   const marker = _leafletMarkers[jobId];
   if (marker && _leafletMap) {
-    _leafletMap.panTo(marker.getLatLng(), { animate: true, duration: 0.4 });
+    const userPt = L.latLng(40.9906, 29.0250);
+    const pinPt  = marker.getLatLng();
+    const mid    = L.latLng((userPt.lat + pinPt.lat) / 2, (userPt.lng + pinPt.lng) / 2);
+    _leafletMap.flyTo(mid, 15, { duration: 0.5 });
+  }
+
+  // Show ETA banner
+  const eta = document.getElementById("map-eta-banner");
+  const etaTxt = document.getElementById("map-eta-text");
+  if (eta) eta.style.display = "flex";
+  if (etaTxt) etaTxt.textContent = `♟ ${job.travel[state.dirMode || "walk"]} dk`;
+}
+
+function deselectMapPin() {
+  state.selectedPin = null;
+
+  // Clear route
+  if (_mapRouteLayer && _leafletMap) {
+    _leafletMap.removeLayer(_mapRouteLayer);
+    _mapRouteLayer = null;
+  }
+
+  // Restore pin styles
+  jobs.forEach(j => {
+    const el = document.getElementById(`lpin-${j.id}`);
+    if (el) { el.classList.remove("lpin-sel", "lpin-dim"); }
+  });
+
+  // Reset sheet
+  const cardEl = document.getElementById("sheet-selected-card");
+  if (cardEl) cardEl.innerHTML = mapBrowseCard();
+  setSheetState("peek");
+
+  // Hide ETA banner
+  const eta = document.getElementById("map-eta-banner");
+  if (eta) eta.style.display = "none";
+}
+
+function drawMapRoute(job) {
+  if (!_leafletMap || !window.L) return;
+  if (_mapRouteLayer) { _leafletMap.removeLayer(_mapRouteLayer); }
+  const modeColors = { walk:"#6C4EFF", bus:"#22C55E", car:"#F59E0B" };
+  const color = modeColors[state.dirMode || "walk"];
+  const lat = job.pin?.lat || (40.9906 + (job.pin?.y - 50) * 0.002);
+  const lng = job.pin?.lng || (29.0250 + (job.pin?.x - 50) * 0.003);
+  _mapRouteLayer = L.polyline([[40.9906, 29.0250],[lat, lng]],
+    { color, weight:3, opacity:.85, dashArray:"8 6" }).addTo(_leafletMap);
+}
+
+function setMapRouteMode(mode) {
+  state.dirMode = mode;
+  document.querySelectorAll(".travel-tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.mode === mode));
+  if (state.selectedPin) {
+    const job = jobs.find(j => j.id === state.selectedPin);
+    if (job) {
+      drawMapRoute(job);
+      const etaTxt = document.getElementById("map-eta-text");
+      const icons = { walk:"♟", bus:"▣", car:"◈" };
+      if (etaTxt) etaTxt.textContent = `${icons[mode]} ${job.travel[mode]} dk`;
+    }
   }
 }
 
-function toggleSheet() {
-  state.sheetExpanded = !state.sheetExpanded;
-  const sheet = document.getElementById("map-sheet");
-  if (sheet) sheet.classList.toggle("expanded", state.sheetExpanded);
-}
+function selectPin(jobId) { selectMapPin(jobId); }
+function toggleSheet() { cycleSheetState(); }
+function filterMapJobs(q) { filterMapSearch(q); }
+function filterMapType(btn, type) { setMapTypeFilter(btn, type); }
 
 function setMatchesTab(i) {
   state.matchesTab = i;
@@ -2948,7 +3213,9 @@ Object.assign(window, {
   go, render, openJob, swipeCard, undoSwipe, resetDeck,
   selectPin, toggleSheet, setMatchesTab, setDirMode,
   selectResult, setRating, sendMessage,
-  filterMapJobs, filterMapType, centerMapOnUser,
+  selectMapPin, deselectMapPin, setSheetState, cycleSheetState,
+  setMapRouteMode, setMapTypeFilter, filterMapSearch, applyMapFilters,
+  setSortMode, filterMapJobs, filterMapType, centerMapOnUser,
   doLogin, demoLogin, openChat, onChatTyping,
   toggleDarkMode, doLogout, saveProfile, removeSkill, addSkill,
   markAllRead, markNotifRead, toggleNotifPref,
