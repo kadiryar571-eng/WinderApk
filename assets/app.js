@@ -945,101 +945,231 @@ function sheetCard(job) {
   </div>`;
 }
 
-/* DISCOVER */
+/* ─── DISCOVER ────────────────────────────────────────────────────── */
+
+const DC_CAT_MAP = {
+  "Kafe":    ["Barista"],
+  "Restoran":["Garson","Aşçı Yardımcısı"],
+  "Mağaza":  ["Satış Temsilcisi","Kasa Görevlisi"],
+  "Kurye":   ["Kurye"],
+  "Çağrı":   ["Çağrı Merkezi Temsilcisi"],
+};
+
+const DC_REASONS = {
+  1:"Kahve deneyimin tam burada geçer",
+  2:"Müşteri odaklı çalışma tarzına uygun",
+  3:"Esnek saatler sana tam uyar",
+  4:"Teknoloji ve satış — tam kombinasyon",
+  5:"Güvenilirlik ve düzen senin tarzın",
+  6:"Satış yeteneğin burada parlar",
+  7:"Mutfak tecrübeni değerlendirme zamanı",
+  8:"İletişim becerilerin ön plana çıkar",
+};
+
+const DC_ALGO_REASONS = [
+  "📍 Hepsine yürüyerek gidebilirsin",
+  "✨ Bugün eklendi, henüz görülmedi",
+  "₺ Bu kategoride en yüksek ücret",
+  "🔥 3 kişi bugün başvurdu",
+  "✦ Profiline en yakın fırsatlar",
+];
+
 function filteredSwipeJobs() {
-  const f = state.swipe.deckFilter || "Tümü";
-  if (f === "Tümü") return jobs;
-  return jobs.filter(j => j.title.includes(f) || (j.tags && j.tags.some(t => t.includes(f))));
+  const f = state.swipe.deckFilter || "";
+  const base = jobs.filter(j => j.matchScore >= 60);
+  if (!f) return base;
+  const titles = DC_CAT_MAP[f] || [];
+  return base.filter(j => titles.includes(j.title));
+}
+
+function buildDiscoverDeck() {
+  return [...filteredSwipeJobs()].sort((a, b) => {
+    const sa = a.matchScore * .7 + Math.max(0, 5 - a.distance) * 6;
+    const sb = b.matchScore * .7 + Math.max(0, 5 - b.distance) * 6;
+    return sb - sa;
+  });
 }
 
 function currentSwipeJob() {
-  const deck = filteredSwipeJobs();
+  const deck = buildDiscoverDeck();
   if (!deck.length) return null;
   return deck[state.swipe.deckIndex % deck.length];
 }
 
-function renderSwipeCard(job, slot) {
+function discoverCard(job, slot) {
   const isTop = slot === 0;
-  const scaleVar = slot === 0 ? "" : slot === 1 ? " back-1" : " back-2";
-  const tier = pinTier(job.matchScore);
-  const matchClass = job.matchScore >= 85 ? "" : job.matchScore >= 70 ? " mid" : " low";
-  return `<div class="swipe-card${isTop ? " top-card" : ""}${scaleVar}" id="${isTop ? "top-card" : `back-card-${slot}`}">
-    ${isTop ? `
-      <div class="swipe-overlay like-overlay" id="like-ol"><div class="swipe-label">İlgileniyorum</div></div>
-      <div class="swipe-overlay pass-overlay" id="pass-ol"><div class="swipe-label">Geç</div></div>
-      <div class="swipe-overlay detail-overlay" id="detail-ol"><div class="swipe-label">Detayları Gör</div></div>
-    ` : ""}
-    <div class="card-visual">
-      <div class="big-initials">${job.initials}</div>
-      <div class="card-match-badge${matchClass}">${job.matchScore}% Uyum</div>
-      <div class="card-type-badge">${job.type}</div>
-      <div class="card-mini-map">
-        <div class="mini-road h" style="top:40%"></div>
-        <div class="mini-road h" style="top:70%"></div>
-        <div class="mini-road v" style="left:40%"></div>
-        <div class="mini-road v" style="left:75%"></div>
-        <div class="card-mini-pin" style="left:${job.pin.x}%;top:${job.pin.y}%"></div>
-        <div class="card-mini-user" style="left:52%;top:56%"></div>
+  const isSpotlight = isTop && job.matchScore >= 85;
+  const tier   = job.matchScore >= 85 ? "high" : job.matchScore >= 70 ? "mid" : "low";
+  const rColor = scoreColor(job.matchScore);
+  const circ   = 2 * Math.PI * 20;
+  const fill   = (job.matchScore / 100) * circ;
+
+  if (!isTop) {
+    return `<div class="dc-card dc-back dc-back-${slot}" style="z-index:${10 - slot}">
+      <div class="dc-hero" style="background:linear-gradient(145deg,rgba(${job.hue},.4),rgba(${job.hue},.1) 65%,var(--surface-2))">
+        <div class="dc-big-init">${job.initials}</div>
+        <div class="dc-hero-fade"></div>
       </div>
+    </div>`;
+  }
+
+  return `<div class="dc-card dc-top${isSpotlight ? " dc-spotlight" : ""}" id="top-card" tabindex="0" role="article">
+    <div class="swipe-overlay like-overlay"   id="like-ol"><div class="dc-stamp dc-stamp-like">İLGİLENİYORUM ♥</div></div>
+    <div class="swipe-overlay pass-overlay"   id="pass-ol"><div class="dc-stamp dc-stamp-pass">GEÇ ✕</div></div>
+    <div class="swipe-overlay detail-overlay" id="detail-ol"><div class="dc-stamp dc-stamp-detail">DETAYLAR ↑</div></div>
+
+    <div class="dc-hero" style="background:linear-gradient(155deg,rgba(${job.hue},.55) 0%,rgba(${job.hue},.22) 55%,var(--surface-2) 90%)">
+      <div class="dc-big-init">${job.initials}</div>
+      ${isSpotlight ? '<div class="dc-spotlight-badge">✦ Sana Özel</div>' : ""}
+
+      <div class="dc-mini-map">
+        <div class="dcm-road dcm-h" style="top:35%"></div>
+        <div class="dcm-road dcm-h" style="top:62%"></div>
+        <div class="dcm-road dcm-v" style="left:38%"></div>
+        <div class="dcm-road dcm-v" style="left:68%"></div>
+        <div class="dcm-route"></div>
+        <div class="dcm-pin dcm-pin-${tier}" style="left:${job.pin.x}%;top:${job.pin.y}%"></div>
+        <div class="dcm-user"></div>
+      </div>
+
+      <div class="dc-match-ring">
+        <svg viewBox="0 0 48 48" width="52" height="52" style="transform:rotate(-90deg)">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="4"/>
+          <circle cx="24" cy="24" r="20" fill="none" stroke="${rColor}" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"
+            class="dc-ring-arc"/>
+        </svg>
+        <div class="dc-ring-num">${job.matchScore}%</div>
+      </div>
+
+      <div class="dc-hero-fade"></div>
     </div>
-    <div class="card-body">
-      <div class="card-title-row">
-        <h2 class="card-title">${job.title}</h2>
-        <span style="font-size:20px;color:var(--text-3);font-weight:800">${job.initials.charAt(0)}</span>
+
+    <div class="dc-body">
+      <div class="dc-title-row">
+        <div class="dc-avatar" style="background:rgba(${job.hue},.2);color:rgba(${job.hue},1)">${job.initials}</div>
+        <div class="dc-title-info">
+          <h2 class="dc-role">${job.title}</h2>
+          <p class="dc-co">${job.company}</p>
+        </div>
+        <span class="dc-type-badge">${job.type}</span>
       </div>
-      <p class="card-company">${job.company} · ${job.sal.cur}${job.sal.min}–${job.sal.max}/${job.sal.per}</p>
-      <div class="card-stats">
-        <span class="card-stat">${icon("ti-map-pin")} ${job.distance} km</span>
-        <span class="card-stat">${icon("ti-briefcase")} ${job.type}</span>
-        <span class="card-stat">${icon("ti-clock")} ${job.schedule.split(" ").slice(-1)[0]}</span>
+
+      <p class="dc-reason">✓ "${DC_REASONS[job.id] || "Profiline uygun bir fırsat"}"</p>
+
+      <div class="dc-kpis">
+        <div class="dc-kpi"><span class="dc-kv" style="color:var(--success)">${job.sal.cur}${job.sal.min}–${job.sal.max}</span><span class="dc-kl">/${job.sal.per}</span></div>
+        <div class="dc-ksep"></div>
+        <div class="dc-kpi"><span class="dc-kv">${icon("ti-map-pin")} ${job.distance} km</span><span class="dc-kl">mesafe</span></div>
+        <div class="dc-ksep"></div>
+        <div class="dc-kpi"><span class="dc-kv">${icon("ti-walk")} ${job.travel.walk} dk</span><span class="dc-kl">yürüyüş</span></div>
       </div>
-      <div class="card-tags">
-        ${job.tags.map(t => `<span class="card-tag">${t}</span>`).join("")}
+
+      <div class="dc-travel">
+        <span class="dc-t dc-walk">${icon("ti-walk")} ${job.travel.walk} dk</span>
+        <span class="dc-t dc-bus">${icon("ti-bus")} ${job.travel.bus} dk</span>
+        <span class="dc-t dc-car">${icon("ti-car")} ${job.travel.car} dk</span>
       </div>
-    </div>
-    <div class="travel-row">
-      <span class="travel-item">${icon("ti-walk")} ${job.travel.walk} dk</span>
-      <span class="travel-item">${icon("ti-bus")} ${job.travel.bus} dk</span>
-      <span class="travel-item">${icon("ti-car")} ${job.travel.car} dk</span>
+
+      <div class="dc-tags">
+        ${job.tags.slice(0,3).map(t => `<span class="dc-tag">${t}</span>`).join("")}
+      </div>
     </div>
   </div>`;
 }
 
 function renderCardDeck() {
-  const deck = filteredSwipeJobs();
+  const deck  = buildDiscoverDeck();
   const total = deck.length;
-  if (!total || state.swipe.deckIndex >= total) {
-    return `<div class="empty-state">
-      <div class="empty-icon">✦</div>
-      <h2 class="empty-title">Hepsini Gördün!</h2>
-      <p class="empty-sub">Bu oturumda <strong>${state.swipe.likedIds.length}</strong> ilana ilgi gösterdin.</p>
-      <button class="btn btn-primary" style="margin-top:12px" onclick="resetDeck()">Yeniden Başla</button>
-    </div>`;
-  }
+  if (!total || state.swipe.deckIndex >= total) return discoverEmptyState();
   const cards = [];
-  for (let i = 2; i >= 0; i--) {
-    const idx = (state.swipe.deckIndex + i) % total;
-    cards.push(renderSwipeCard(deck[idx], i));
+  for (let i = Math.min(2, total - 1 - state.swipe.deckIndex); i >= 0; i--) {
+    cards.push(discoverCard(deck[state.swipe.deckIndex + i], i));
   }
   return cards.join("");
 }
 
+function discoverEmptyState() {
+  return `<div class="dc-empty">
+    <div class="dc-empty-icon">✦</div>
+    <h2 class="dc-empty-title">Tüm fırsatları gördün!</h2>
+    <p class="dc-empty-sub">Bu oturumda <strong>${state.swipe.likedIds.length}</strong> ilana ilgi gösterdin.</p>
+    <div class="dc-empty-stats">
+      <div class="dc-es"><strong>${state.swipe.likedIds.length}</strong><span>Beğeni</span></div>
+      <div class="dc-es"><strong>${state.swipe.skippedIds.length}</strong><span>Geçilen</span></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:20px;height:48px;padding:0 32px" onclick="resetDeck()">Yeniden Keşfet</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="go('nearby')">Haritada Gör →</button>
+  </div>`;
+}
+
+function quickBrowseCard(job) {
+  return `<div class="qbc" onclick="openJob(${job.id},'discover')">
+    <div class="qbc-avatar" style="background:rgba(${job.hue},.18);color:rgba(${job.hue},1)">${job.initials}</div>
+    <div class="qbc-body">
+      <h4 class="qbc-role">${job.title}</h4>
+      <p class="qbc-co">${job.company}</p>
+      <p class="qbc-dist">${icon("ti-map-pin")} ${job.distance} km · ${icon("ti-walk")} ${job.travel.walk} dk</p>
+    </div>
+    <span class="score-pill ${scorePillClass(job.matchScore)}" style="align-self:center;flex-shrink:0">${job.matchScore}%</span>
+  </div>`;
+}
+
+function updateDeckInfo() {
+  const deck      = buildDiscoverDeck();
+  const remaining = Math.max(0, deck.length - state.swipe.deckIndex);
+  const dotsEl    = document.getElementById("dc-dots");
+  const countEl   = document.getElementById("dc-count");
+  const reasonEl  = document.getElementById("dc-algo-reason");
+  const detailBtn = document.getElementById("dc-detail-btn");
+  const job       = currentSwipeJob();
+
+  if (dotsEl) dotsEl.innerHTML = Array.from({length: Math.min(5, remaining)}, (_, i) =>
+    `<div class="dc-dot${i === 0 ? " dc-dot-active" : ""}"></div>`).join("");
+  if (countEl)  countEl.textContent  = `${remaining} / ${deck.length}`;
+  if (reasonEl) reasonEl.textContent = DC_ALGO_REASONS[state.swipe.deckIndex % DC_ALGO_REASONS.length];
+  if (detailBtn && job) detailBtn.setAttribute("onclick", `openJob(${job.id},'discover')`);
+}
+
+function showLikeExplosion() {
+  const stage = document.querySelector(".dc-stage");
+  if (!stage) return;
+  const ex = document.createElement("div");
+  ex.className = "dc-like-explosion";
+  ex.innerHTML = Array.from({length: 7}, (_, i) =>
+    `<div class="dc-lh" style="--i:${i}">♥</div>`).join("");
+  stage.appendChild(ex);
+  setTimeout(() => ex.remove(), 900);
+}
+
+function showSwipeToast(msg) {
+  const wrap = document.querySelector(".dc-wrap");
+  if (!wrap) return;
+  const t = document.createElement("div");
+  t.className = "dc-toast";
+  t.textContent = msg;
+  wrap.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("dc-toast-show"));
+  setTimeout(() => { t.classList.remove("dc-toast-show"); setTimeout(() => t.remove(), 300); }, 2800);
+}
+
+function toggleSpeedMode() {
+  state.speedMode = !state.speedMode;
+  const btn   = document.getElementById("dc-speed-btn");
+  const stage = document.querySelector(".dc-stage");
+  if (btn)   btn.classList.toggle("dc-speed-active", state.speedMode);
+  if (stage) stage.classList.toggle("dc-speed-mode", state.speedMode);
+}
+
 function renderDetailPane(job) {
-  if (!job) return `<div class="empty-state"><div class="empty-icon">⊕</div>
-    <p class="empty-sub">Bir iş ilanı seçerek detaylarını burada görüntüle.</p></div>`;
+  if (!job) return "";
   return `<div style="padding:24px 20px">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
       <div style="width:52px;height:52px;border-radius:var(--r-sm);background:linear-gradient(135deg,rgba(${job.hue},.3),rgba(${job.hue},.1));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--text-2);">${job.initials}</div>
-      <div>
-        <h2 style="font-size:18px;font-weight:800">${job.title}</h2>
-        <p style="font-size:13px;color:var(--text-2)">${job.company}</p>
-      </div>
+      <div><h2 style="font-size:18px;font-weight:800">${job.title}</h2><p style="font-size:13px;color:var(--text-2)">${job.company}</p></div>
       <span class="score-pill ${scorePillClass(job.matchScore)}" style="margin-left:auto">${job.matchScore}%</span>
     </div>
     <p style="font-size:14px;color:var(--text-2);line-height:1.6;margin-bottom:16px">${job.desc}</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-      ${job.tags.map(t => `<span class="chip active">${t}</span>`).join("")}
-    </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" style="flex:1" onclick="openJob(${job.id},'discover')">Detayları Gör</button>
       <button class="btn btn-success" style="flex:1" onclick="swipeCard('right')">İlgileniyorum</button>
@@ -1048,31 +1178,69 @@ function renderDetailPane(job) {
 }
 
 function renderDiscover() {
-  const job = currentSwipeJob();
+  const deck      = buildDiscoverDeck();
+  const remaining = Math.max(0, deck.length - state.swipe.deckIndex);
+  const job       = currentSwipeJob();
+  const filter    = state.swipe.deckFilter || "";
+
+  const cats = [
+    {val:"",        label:"◉ Tümü"},
+    {val:"Kafe",    label:"☕ Kafe"},
+    {val:"Restoran",label:"🍽 Restoran"},
+    {val:"Mağaza",  label:"🛍 Mağaza"},
+    {val:"Kurye",   label:"📦 Kurye"},
+    {val:"Çağrı",   label:"📞 Çağrı"},
+  ];
+
   return screen(`
-    <div class="discover-layout">
-      <div class="deck-area">
-        <header class="topbar" style="padding:0 4px">
-          <button class="topbar-action" onclick="go('home')">${icon("ti-arrow-left")}</button>
-          <div class="topbar-logo">
-            <div class="topbar-logo-mark">✦</div>
-            <span class="topbar-logo-text">Keşfet</span>
-          </div>
-          <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
-        </header>
-        <div style="padding:0 4px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
-          ${["Tümü","Barista","Garson","Satış","Kurye"].map(t => `
-            <div class="chip${(state.swipe.deckFilter||"Tümü")===t?" active":""}" onclick="filterSwipeDeck(this,'${t}')">${t}</div>`).join("")}
+    <div class="dc-wrap">
+      <header class="dc-topbar">
+        <button class="dc-loc-btn" onclick="go('nearby')">
+          ${icon("ti-map-pin")} Kadıköy <span style="opacity:.5;font-size:10px">▾</span>
+        </button>
+        <div class="topbar-logo">
+          <div class="topbar-logo-mark">✦</div>
+          <span class="topbar-logo-text">Keşfet</span>
         </div>
+        <div style="display:flex;gap:2px">
+          <button class="topbar-action${state.speedMode ? " dc-speed-active" : ""}" id="dc-speed-btn" onclick="toggleSpeedMode()" title="Hız Modu">⚡</button>
+          <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
+        </div>
+      </header>
+
+      <div class="dc-chips" id="dc-filter-chips">
+        ${cats.map(c => `<div class="chip${filter === c.val ? " active" : ""}" onclick="filterSwipeDeck(this,'${c.val}')">${c.label}</div>`).join("")}
+      </div>
+
+      <div class="dc-stage${state.speedMode ? " dc-speed-mode" : ""}" id="dc-stage">
         <div class="card-deck" id="card-deck">${renderCardDeck()}</div>
-        <div class="swipe-actions">
-          <button class="swipe-btn swipe-undo" onclick="undoSwipe()" title="Geri Al">${icon("ti-undo")}</button>
-          <button class="swipe-btn swipe-pass" onclick="swipeCard('left')" title="Geç">${icon("ti-x")}</button>
-          <button class="swipe-btn swipe-detail" onclick="openJob(${job ? job.id : 1},'discover')" title="Detay">${icon("ti-arrow-up")}</button>
-          <button class="swipe-btn swipe-like" onclick="swipeCard('right')" title="İlgileniyorum">${icon("ti-heart")}</button>
+      </div>
+
+      <div class="dc-deck-info">
+        <div class="dc-dots" id="dc-dots">
+          ${Array.from({length: Math.min(5, remaining)}, (_, i) =>
+            `<div class="dc-dot${i === 0 ? " dc-dot-active" : ""}"></div>`).join("")}
+        </div>
+        <div class="dc-algo-reason" id="dc-algo-reason">${DC_ALGO_REASONS[state.swipe.deckIndex % DC_ALGO_REASONS.length]}</div>
+        <span class="dc-count" id="dc-count">${remaining} / ${deck.length}</span>
+      </div>
+
+      <div class="dc-actions">
+        <button class="dc-btn dc-undo"   onclick="undoSwipe()"                               title="Geri Al">${icon("ti-undo")}</button>
+        <button class="dc-btn dc-pass"   onclick="swipeCard('left')"                         title="Geç">✕</button>
+        <button class="dc-btn dc-detail" onclick="openJob(${job ? job.id : 1},'discover')"   title="Detay" id="dc-detail-btn">↑</button>
+        <button class="dc-btn dc-like"   onclick="swipeCard('right')"                        title="İlgileniyorum">♥</button>
+      </div>
+
+      <div class="dc-quick-browse">
+        <div class="dc-qb-hdr">
+          <span class="dc-qb-title">Tüm fırsatlar</span>
+          <span class="dc-qb-count">${deck.length} ilan</span>
+        </div>
+        <div class="h-scroll" style="padding:0 14px 16px;gap:8px">
+          ${deck.map(j => quickBrowseCard(j)).join("")}
         </div>
       </div>
-      <div class="detail-pane" id="detail-pane">${renderDetailPane(job)}</div>
     </div>`, bottomNav(""));
 }
 
@@ -2735,16 +2903,23 @@ function commitSwipe(dir) {
   }
   if (dir === "right") {
     state.swipe.likedIds.push(job.id);
+    navigator.vibrate?.([20, 30, 80]);
+    showLikeExplosion();
     state.swipe.deckIndex++;
-    go("match");
-    return;
+    // Every 3rd like triggers match screen
+    if (state.swipe.likedIds.length % 3 === 1) {
+      setTimeout(() => go("match"), 650);
+      return;
+    }
+    showSwipeToast(`♥ ${job.company}'e ilgin iletildi`);
+  } else {
+    state.swipe.skippedIds.push(job.id);
+    navigator.vibrate?.(8);
+    state.swipe.deckIndex++;
   }
-  state.swipe.skippedIds.push(job.id);
-  state.swipe.deckIndex++;
-  const deck = document.getElementById("card-deck");
-  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
-  const dp = document.getElementById("detail-pane");
-  if (dp) dp.innerHTML = renderDetailPane(currentSwipeJob());
+  const deckEl = document.getElementById("card-deck");
+  if (deckEl) { deckEl.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  updateDeckInfo();
 }
 
 function swipeCard(dir) {
@@ -2760,8 +2935,9 @@ function undoSwipe() {
   else state.swipe.skippedIds = state.swipe.skippedIds.filter(id => id !== last.job.id);
   state.swipe.deckIndex = last.deckIndex;
   state.swipe.lastAction = null;
-  const deck = document.getElementById("card-deck");
-  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  const deckEl = document.getElementById("card-deck");
+  if (deckEl) { deckEl.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  updateDeckInfo();
 }
 
 function resetDeck() {
@@ -2769,8 +2945,9 @@ function resetDeck() {
   state.swipe.likedIds = [];
   state.swipe.skippedIds = [];
   state.swipe.lastAction = null;
-  const deck = document.getElementById("card-deck");
-  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  const deckEl = document.getElementById("card-deck");
+  if (deckEl) { deckEl.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  updateDeckInfo();
 }
 
 function playSwipeSound(dir) {
@@ -3023,12 +3200,11 @@ function setPrefRadius(r) {
 function filterSwipeDeck(btn, tag) {
   state.swipe.deckFilter = tag;
   state.swipe.deckIndex  = 0;
-  document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  document.querySelectorAll("#dc-filter-chips .chip").forEach(c => c.classList.remove("active"));
   btn.classList.add("active");
-  const deck = document.getElementById("card-deck");
-  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
-  const dp = document.getElementById("detail-pane");
-  if (dp) dp.innerHTML = renderDetailPane(currentSwipeJob());
+  const deckEl = document.getElementById("card-deck");
+  if (deckEl) { deckEl.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  updateDeckInfo();
 }
 
 function openInterview(name, initials, role) {
@@ -3220,6 +3396,7 @@ Object.assign(window, {
   toggleDarkMode, doLogout, saveProfile, removeSkill, addSkill,
   markAllRead, markNotifRead, toggleNotifPref,
   togglePrefType, setPrefRadius, filterSwipeDeck,
+  toggleSpeedMode, showLikeExplosion, showSwipeToast, updateDeckInfo,
   openInterview, refreshLocation,
   formatAuthPhone, submitAuthPhone, onRegOtpInput, onRegOtpKey,
   onRegNameInput, updateRegAvatar, cycleAvatarColor,
