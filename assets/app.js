@@ -13,7 +13,7 @@ const state = {
   ],
   swipe: {
     deckIndex:0, likedIds:[], skippedIds:[],
-    lastAction:null,
+    lastAction:null, deckFilter:"Tümü",
     isDragging:false, startX:0, startY:0,
     currentDeltaX:0, currentDeltaY:0,
     thresholdReached:false, directionLocked:null,
@@ -30,6 +30,11 @@ const state = {
   chatMessages: [],
   chatTyping: false,
   matchesList: [],
+  notifications: [],
+  activeInterview: null,
+  notifPrefs: { match:true, message:true, interview:true, email:true, promo:false },
+  prefTypes: ["Yarı zamanlı","Tam zamanlı"],
+  prefRadius: "5 km",
 };
 
 /* ─── DATA ───────────────────────────────────────────────────────── */
@@ -153,7 +158,7 @@ const matchItems = [
   ],
 ];
 const matchTabLabels = ["Yeni Eşleşme","Aktif Konuşma","Görüşme","İşe Alındı"];
-const matchTabCounts = [3,2,1,1];
+const matchTabCounts = matchItems.map(t => t.length);
 
 /* ─── ROUTING ────────────────────────────────────────────────────── */
 const navItems = [
@@ -538,8 +543,16 @@ function sheetCard(job) {
 }
 
 /* DISCOVER */
+function filteredSwipeJobs() {
+  const f = state.swipe.deckFilter || "Tümü";
+  if (f === "Tümü") return jobs;
+  return jobs.filter(j => j.title.includes(f) || (j.tags && j.tags.some(t => t.includes(f))));
+}
+
 function currentSwipeJob() {
-  return jobs[state.swipe.deckIndex % jobs.length];
+  const deck = filteredSwipeJobs();
+  if (!deck.length) return null;
+  return deck[state.swipe.deckIndex % deck.length];
 }
 
 function renderSwipeCard(job, slot) {
@@ -590,8 +603,9 @@ function renderSwipeCard(job, slot) {
 }
 
 function renderCardDeck() {
-  const total = jobs.length;
-  if (state.swipe.deckIndex >= total) {
+  const deck = filteredSwipeJobs();
+  const total = deck.length;
+  if (!total || state.swipe.deckIndex >= total) {
     return `<div class="empty-state">
       <div class="empty-icon">✦</div>
       <h2 class="empty-title">Hepsini Gördün!</h2>
@@ -602,7 +616,7 @@ function renderCardDeck() {
   const cards = [];
   for (let i = 2; i >= 0; i--) {
     const idx = (state.swipe.deckIndex + i) % total;
-    cards.push(renderSwipeCard(jobs[idx], i));
+    cards.push(renderSwipeCard(deck[idx], i));
   }
   return cards.join("");
 }
@@ -644,11 +658,8 @@ function renderDiscover() {
           <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
         </header>
         <div style="padding:0 4px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
-          <div class="chip active">Tümü</div>
-          <div class="chip">Barista</div>
-          <div class="chip">Garson</div>
-          <div class="chip">Satış</div>
-          <div class="chip">Kurye</div>
+          ${["Tümü","Barista","Garson","Satış","Kurye"].map(t => `
+            <div class="chip${(state.swipe.deckFilter||"Tümü")===t?" active":""}" onclick="filterSwipeDeck(this,'${t}')">${t}</div>`).join("")}
         </div>
         <div class="card-deck" id="card-deck">${renderCardDeck()}</div>
         <div class="swipe-actions">
@@ -664,13 +675,13 @@ function renderDiscover() {
 
 /* JOB DETAIL */
 function openJob(id, source) {
-  state.detailJobId = id;
+  state.detailJobId = String(id);
   state.detailSource = source || "home";
   go("job-detail");
 }
 
 function renderJobDetail() {
-  const job = jobs.find(j => j.id === state.detailJobId) || jobs[0];
+  const job = jobs.find(j => String(j.id) === String(state.detailJobId)) || jobs[0];
   const backRoute = state.detailSource === "discover" ? "discover" :
                    state.detailSource === "nearby" ? "nearby" : "home";
   const grad = `linear-gradient(135deg,rgba(${job.hue},.5) 0%,rgba(${job.hue},.15) 50%,var(--bg) 100%)`;
@@ -770,20 +781,22 @@ function renderMatch() {
 }
 
 /* NOTIFICATIONS */
+const _staticNotifs = [
+  { icon:"✦", bg:"var(--primary-dim)", title:"Yeni Eşleşme",         body:"Cafe Lumiere seni beğendi!", time:"Az önce", unread:true,  action:"messages" },
+  { icon:"◎", bg:"var(--success-dim)", title:"Mesaj",                  body:"Beyaz Masa: 'Yarın müsait misiniz?'", time:"10 dk", unread:true, action:"chat" },
+  { icon:"▤", bg:"var(--warning-dim)", title:"Görüşme Hatırlatması",   body:"Teknomarket görüşmen yarın 14:00'te", time:"1 saat", unread:false, action:"interview" },
+  { icon:"⊙", bg:"var(--surface-3)",   title:"Profil Güncelleme",      body:"Profilin tamamlanma oranı %72'de", time:"Dün", unread:false, action:"settings-profile" },
+  { icon:"↗", bg:"var(--primary-dim)", title:"Yeni İlanlar",           body:"Bölgene 5 yeni ilan eklendi", time:"Dün", unread:false, action:"nearby" },
+];
+
 function renderNotifications() {
-  const notifs = [
-    { icon:"✦", bg:"var(--primary-dim)", title:"Yeni Eşleşme", body:"Cafe Lumiere seni beğendi!", time:"Az önce", unread:true },
-    { icon:"◎", bg:"var(--success-dim)", title:"Mesaj", body:"Beyaz Masa: 'Yarın müsait misiniz?'", time:"10 dk", unread:true },
-    { icon:"▤", bg:"var(--warning-dim)", title:"Görüşme Hatırlatması", body:"Teknomarket görüşmen yarın 14:00'te", time:"1 saat", unread:false },
-    { icon:"⊙", bg:"var(--surface-3)",   title:"Profil Güncelleme", body:"Profilin tamamlanma oranı %72'de", time:"Dün", unread:false },
-    { icon:"↗", bg:"var(--primary-dim)", title:"Yeni İlanlar", body:"Bölgene 5 yeni ilan eklendi", time:"Dün", unread:false },
-  ];
+  const notifs = state.notifications.length ? state.notifications : _staticNotifs;
   return screen(`
     ${topbar("Bildirimler", "home",
-      `<button class="topbar-action" style="font-size:12px;font-weight:700;color:var(--primary);width:auto;padding:0 8px" onclick="">Tümünü Oku</button>`)}
+      `<button class="topbar-action" style="font-size:12px;font-weight:700;color:var(--primary);width:auto;padding:0 8px" onclick="markAllRead()">Tümünü Oku</button>`)}
     <div class="screen-body">
-      ${notifs.map(n => `
-        <div class="notif-item${n.unread ? " unread" : ""}">
+      ${notifs.map((n,i) => `
+        <div class="notif-item${n.unread ? " unread" : ""}" id="notif-${i}" onclick="go('${n.action || 'home'}');markNotifRead(${i})">
           <div class="notif-icon" style="background:${n.bg}">${n.icon}</div>
           <div class="notif-body">
             <h3>${n.title}</h3>
@@ -809,7 +822,7 @@ function renderMatches() {
     </div>
     <div class="screen-body">
       ${items.length ? items.map(m => `
-        <div class="match-card" onclick="go('chat')">
+        <div class="match-card" onclick="${tab === 2 ? `openInterview('${m.name}','${m.initials}','${m.role}')` : "go('chat')"}">
           <div class="match-avatar">
             ${m.initials}
             <div class="match-status-dot ${m.dot}"></div>
@@ -822,6 +835,7 @@ function renderMatches() {
           <div class="match-right">
             <span class="match-time">${m.time}</span>
             ${m.unread > 0 ? `<span class="match-unread">${m.unread}</span>` : ""}
+            ${tab === 2 ? `<span style="font-size:10px;color:var(--primary)">→ Görüşme</span>` : ""}
           </div>
         </div>`).join("") :
         `<div class="empty-state">
@@ -980,7 +994,7 @@ function renderProfile() {
       <div class="profile-section">
         <p class="profile-section-title">Profilini Güçlendir</p>
         ${suggestions.map(s => `
-          <div class="improve-card">
+          <div class="improve-card" onclick="go('settings-profile')" style="cursor:pointer">
             <div class="improve-icon">${s.icon}</div>
             <div class="improve-body">
               <h4>${s.label}</h4>
@@ -995,6 +1009,7 @@ function renderProfile() {
         <div class="skill-grid">
           ${user.skills.map(s => `<span class="skill-chip">${s}</span>`).join("")}
           ${user.certs.map(c => `<span class="skill-chip" style="background:var(--success-dim);color:var(--success);border-color:rgba(34,197,94,.25)">${icon("ti-badge")} ${c}</span>`).join("")}
+          <span class="skill-chip" style="border-style:dashed;opacity:.7;cursor:pointer" onclick="go('settings-profile')">+ Düzenle</span>
         </div>
       </div>
 
@@ -1022,56 +1037,207 @@ function renderProfile() {
 
 /* SETTINGS */
 function renderSettings() {
+  const dark = document.body.classList.contains("light-mode") ? false : true;
   return screen(`
     ${topbar("Ayarlar", "profile")}
     <div class="screen-body">
       <div class="settings-group">
         <p class="settings-group-title">Hesap</p>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--primary-dim);color:var(--primary)">⊙</div><div class="settings-row-body"><h3>Profil Düzenle</h3><p>İsim, fotoğraf, beceriler</p></div><span class="settings-row-right">→</span></div>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">◈</div><div class="settings-row-body"><h3>Kimlik Doğrulama</h3><p>Doğrulandı ✓</p></div><span class="settings-row-right">→</span></div>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--warning-dim);color:var(--warning)">◉</div><div class="settings-row-body"><h3>Bildirimler</h3><p>Push, e-posta ayarları</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="go('settings-profile')"><div class="settings-row-icon" style="background:var(--primary-dim);color:var(--primary)">⊙</div><div class="settings-row-body"><h3>Profil Düzenle</h3><p>İsim, fotoğraf, beceriler</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="go('settings-verify')"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">◈</div><div class="settings-row-body"><h3>Kimlik Doğrulama</h3><p>Doğrulandı ✓</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="go('settings-notifs')"><div class="settings-row-icon" style="background:var(--warning-dim);color:var(--warning)">◉</div><div class="settings-row-body"><h3>Bildirimler</h3><p>Push, e-posta ayarları</p></div><span class="settings-row-right">→</span></div>
       </div>
       <div class="settings-group">
         <p class="settings-group-title">Tercihler</p>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⊞</div><div class="settings-row-body"><h3>İş Tercihleri</h3><p>Yarı zamanlı, hafta sonu</p></div><span class="settings-row-right">→</span></div>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">◉</div><div class="settings-row-body"><h3>Konum</h3><p>Kadıköy, 5 km yarıçap</p></div><span class="settings-row-right">→</span></div>
-        <div class="settings-row">
+        <div class="settings-row" onclick="go('settings-prefs')"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⊞</div><div class="settings-row-body"><h3>İş Tercihleri</h3><p>${user.availability}</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="go('settings-location')"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">◉</div><div class="settings-row-body"><h3>Konum</h3><p>${user.location}</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="toggleDarkMode()">
           <div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⌘</div>
           <div class="settings-row-body"><h3>Karanlık Mod</h3><p>Uygulama genelinde</p></div>
-          <div class="toggle on"><div class="toggle-knob"></div></div>
+          <div class="toggle${dark?" on":""}"><div class="toggle-knob"></div></div>
         </div>
       </div>
       <div class="settings-group">
         <p class="settings-group-title">Uygulama</p>
-        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⋄</div><div class="settings-row-body"><h3>Hakkında</h3><p>Matchwork v2.0</p></div><span class="settings-row-right">→</span></div>
-        <div class="settings-row" onclick="go('auth')"><div class="settings-row-icon" style="background:var(--danger-dim);color:var(--danger)">✕</div><div class="settings-row-body"><h3 style="color:var(--danger)">Çıkış Yap</h3></div></div>
+        <div class="settings-row" onclick="go('settings-about')"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⋄</div><div class="settings-row-body"><h3>Hakkında</h3><p>Matchwork v2.0</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="doLogout()"><div class="settings-row-icon" style="background:var(--danger-dim);color:var(--danger)">✕</div><div class="settings-row-body"><h3 style="color:var(--danger)">Çıkış Yap</h3></div></div>
       </div>
     </div>`, bottomNav(""));
 }
 
+/* SETTINGS SUB-SCREENS */
+function renderSettingsProfile() {
+  return screen(`
+    ${topbar("Profil Düzenle", "settings")}
+    <div class="screen-body">
+      <div class="settings-group">
+        <p class="settings-group-title">Kişisel Bilgiler</p>
+        <div class="input-group"><label class="input-label">Tam Ad</label>
+          <input class="input-field" id="sp-name" value="${user.name}"></div>
+        <div class="input-group"><label class="input-label">Rol / Unvan</label>
+          <input class="input-field" id="sp-role" value="${user.role}"></div>
+        <div class="input-group"><label class="input-label">Konum</label>
+          <input class="input-field" id="sp-location" value="${user.location}"></div>
+        <div class="input-group"><label class="input-label">Deneyim</label>
+          <input class="input-field" id="sp-exp" value="${user.experience}"></div>
+        <div class="input-group"><label class="input-label">Müsaitlik</label>
+          <input class="input-field" id="sp-avail" value="${user.availability}"></div>
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">Yetenekler</p>
+        <div class="skill-grid" style="padding:0 2px 12px">
+          ${user.skills.map((s,i) => `<span class="skill-chip" onclick="removeSkill(${i})" title="Kaldır">${s} ✕</span>`).join("")}
+          <span class="skill-chip" style="border-style:dashed;opacity:.7" onclick="addSkill()">+ Ekle</span>
+        </div>
+      </div>
+      <div style="padding:16px 18px 32px;display:flex;gap:12px">
+        <button class="btn btn-ghost" style="flex:1" onclick="go('settings')">Vazgeç</button>
+        <button class="btn btn-primary" style="flex:2" onclick="saveProfile()">Kaydet</button>
+      </div>
+    </div>`);
+}
+
+function renderSettingsVerify() {
+  return screen(`
+    ${topbar("Kimlik Doğrulama", "settings")}
+    <div class="screen-body" style="text-align:center;padding-top:48px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--success-dim);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 20px">✓</div>
+      <h2 style="font-size:22px;font-weight:800;margin-bottom:8px">Kimliğin Doğrulandı</h2>
+      <p class="body-sm" style="max-width:260px;margin:0 auto 32px;color:var(--text-2)">Kimlik doğrulaman tamamlandı. İşverenler profilinde doğrulama rozetini görebilir.</p>
+      <div class="settings-group" style="text-align:left">
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">✓</div><div class="settings-row-body"><h3>TC Kimlik</h3><p>Doğrulandı · ${new Date().toLocaleDateString('tr-TR')}</p></div></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">✓</div><div class="settings-row-body"><h3>E-posta</h3><p>selin@demo.com · Doğrulandı</p></div></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-3)">◎</div><div class="settings-row-body"><h3>Telefon</h3><p>Henüz doğrulanmadı</p></div><span class="settings-row-right" style="color:var(--primary);font-size:12px">Doğrula</span></div>
+      </div>
+    </div>`);
+}
+
+function renderSettingsNotifs() {
+  const prefs = state.notifPrefs;
+  const row = (key, title, sub) => `
+    <div class="settings-row" onclick="toggleNotifPref('${key}')">
+      <div class="settings-row-body"><h3>${title}</h3><p>${sub}</p></div>
+      <div class="toggle${prefs[key]?" on":""}"><div class="toggle-knob"></div></div>
+    </div>`;
+  return screen(`
+    ${topbar("Bildirimler", "settings")}
+    <div class="screen-body">
+      <div class="settings-group">
+        <p class="settings-group-title">Push Bildirimleri</p>
+        ${row("match",   "Yeni Eşleşme",          "Biri seni beğendiğinde")}
+        ${row("message", "Mesajlar",               "Yeni mesaj geldiğinde")}
+        ${row("interview","Görüşme Hatırlatması",  "Görüşme öncesi uyarı")}
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">E-posta</p>
+        ${row("email",   "Haftalık Özet",          "İş ve eşleşme özeti")}
+        ${row("promo",   "Kampanyalar",            "Fırsatlar ve yenilikler")}
+      </div>
+    </div>`);
+}
+
+function renderSettingsPrefs() {
+  const types = ["Tam zamanlı","Yarı zamanlı","Serbest","Staj"];
+  const radii = ["1 km","3 km","5 km","10 km"];
+  return screen(`
+    ${topbar("İş Tercihleri", "settings")}
+    <div class="screen-body">
+      <div class="settings-group">
+        <p class="settings-group-title">İş Tipi</p>
+        <div class="skill-grid" style="padding:8px 2px 12px">
+          ${types.map(t => `<span class="skill-chip${state.prefTypes.includes(t)?" selected":""}" onclick="togglePrefType('${t}')" style="${state.prefTypes.includes(t)?"background:var(--primary-dim);color:var(--primary);border-color:var(--primary)":""}">${t}</span>`).join("")}
+        </div>
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">Mesafe</p>
+        <div style="display:flex;gap:8px;padding:8px 2px 12px;flex-wrap:wrap">
+          ${radii.map(r => `<span class="skill-chip${state.prefRadius===r?" selected":""}" onclick="setPrefRadius('${r}')" style="${state.prefRadius===r?"background:var(--primary-dim);color:var(--primary);border-color:var(--primary)":""}">${r}</span>`).join("")}
+        </div>
+      </div>
+      <div style="padding:16px 18px 32px">
+        <button class="btn btn-primary btn-full" onclick="go('settings')">Kaydet</button>
+      </div>
+    </div>`);
+}
+
+function renderSettingsLocation() {
+  const loc = window.MW?.Location.current || { lat: 40.9906, lng: 29.0250 };
+  return screen(`
+    ${topbar("Konum", "settings")}
+    <div class="screen-body">
+      <div class="settings-group">
+        <p class="settings-group-title">Mevcut Konum</p>
+        <div class="settings-row">
+          <div class="settings-row-icon" style="background:var(--primary-dim);color:var(--primary)">◉</div>
+          <div class="settings-row-body"><h3>${user.location}</h3><p>${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</p></div>
+        </div>
+      </div>
+      <div style="padding:16px 18px">
+        <button class="btn btn-primary btn-full" onclick="refreshLocation()">
+          ${icon("ti-map-pin")} GPS ile Güncelle
+        </button>
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">Arama Yarıçapı</p>
+        <div style="display:flex;gap:8px;padding:8px 2px 12px;flex-wrap:wrap">
+          ${["1 km","3 km","5 km","10 km"].map(r => `<span class="skill-chip${state.prefRadius===r?" selected":""}" onclick="setPrefRadius('${r}')" style="${state.prefRadius===r?"background:var(--primary-dim);color:var(--primary);border-color:var(--primary)":""}">${r}</span>`).join("")}
+        </div>
+      </div>
+    </div>`);
+}
+
+function renderSettingsAbout() {
+  return screen(`
+    ${topbar("Hakkında", "settings")}
+    <div class="screen-body" style="text-align:center;padding-top:40px">
+      <div style="width:64px;height:64px;border-radius:18px;background:var(--primary-dim);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">✦</div>
+      <h2 style="font-size:22px;font-weight:900;margin-bottom:4px">Matchwork</h2>
+      <p style="color:var(--text-3);font-size:13px;margin-bottom:32px">Versiyon 2.0.0</p>
+      <div class="settings-group" style="text-align:left">
+        <p class="settings-group-title">Teknoloji</p>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">◈</div><div class="settings-row-body"><h3>Supabase</h3><p>Veritabanı & Auth</p></div></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--primary-dim);color:var(--primary)">⌾</div><div class="settings-row-body"><h3>Socket.io</h3><p>Gerçek zamanlı mesajlaşma</p></div></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--warning-dim);color:var(--warning)">◉</div><div class="settings-row-body"><h3>Leaflet.js</h3><p>İnteraktif harita</p></div></div>
+      </div>
+      <div class="settings-group" style="text-align:left">
+        <p class="settings-group-title">Bağlantılar</p>
+        <div class="settings-row"><div class="settings-row-body"><h3>GitHub</h3><p>github.com/kadiryar571-eng/WinderApk</p></div><span class="settings-row-right">↗</span></div>
+        <div class="settings-row"><div class="settings-row-body"><h3>Gizlilik Politikası</h3><p>Verileriniz güvende</p></div><span class="settings-row-right">→</span></div>
+      </div>
+    </div>`);
+}
+
 /* INTERVIEW */
 function renderInterview() {
+  const iv = state.activeInterview || matchItems[2][0] || {};
+  const co = iv.name || "Şirket";
+  const coInit = iv.initials || co.slice(0,2).toUpperCase();
+  const role = iv.role || "Pozisyon";
+  const d = new Date(); d.setDate(d.getDate() + 3);
+  const dateDay = iv.date || d.getDate();
+  const dateMon = iv.month || d.toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
+  const time = iv.time || "14:00";
   return screen(`
     ${topbar("Görüşme Detayı", "matches")}
     <div class="screen-body">
       <div class="interview-card">
         <div class="interview-header">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <div class="match-avatar" style="width:44px;height:44px">TM</div>
+            <div class="match-avatar" style="width:44px;height:44px">${coInit}</div>
             <div>
-              <h3 style="font-weight:800">Teknomarket</h3>
-              <p style="font-size:13px;color:var(--text-2)">Kasa Görevlisi</p>
+              <h3 style="font-weight:800">${co}</h3>
+              <p style="font-size:13px;color:var(--text-2)">${role}</p>
             </div>
             <span class="badge badge-warning" style="margin-left:auto">Beklemede</span>
           </div>
         </div>
         <div class="interview-time-block">
           <div>
-            <div class="interview-date-big">17</div>
-            <div class="interview-date-month">Haziran 2026</div>
+            <div class="interview-date-big">${dateDay}</div>
+            <div class="interview-date-month">${dateMon}</div>
           </div>
           <div>
-            <p style="font-size:18px;font-weight:800">14:00</p>
+            <p style="font-size:18px;font-weight:800">${time}</p>
             <p style="font-size:12px;color:var(--text-2)">Görüntülü Görüşme</p>
           </div>
         </div>
@@ -1079,7 +1245,7 @@ function renderInterview() {
           <p class="body-sm">Görüşme bağlantısı e-posta ile paylaşılacak. Görüntülü aramaya hazır ol.</p>
         </div>
         <div class="interview-actions">
-          <button class="btn btn-danger" style="flex:1">Reddet</button>
+          <button class="btn btn-danger" style="flex:1" onclick="go('matches')">Reddet</button>
           <button class="btn btn-success" style="flex:2" onclick="go('result')">Onayla</button>
         </div>
       </div>
@@ -1088,10 +1254,12 @@ function renderInterview() {
 
 /* NAVIGATION */
 function renderNavigation() {
+  const job = jobs.find(j => String(j.id) === String(state.detailJobId)) || jobs[0];
+  const t = job.travel || { walk:15, bus:6, car:4 };
   const modes = [
-    { key:"walk", icon:"♟", label:"Yürüyerek", time:"15 dk" },
-    { key:"bus",  icon:"▣", label:"Otobüs",    time:"6 dk"  },
-    { key:"car",  icon:"◈", label:"Araba",     time:"4 dk"  },
+    { key:"walk", icon:"♟", label:"Yürüyerek", time:`${t.walk} dk` },
+    { key:"bus",  icon:"▣", label:"Otobüs",    time:`${t.bus} dk`  },
+    { key:"car",  icon:"◈", label:"Araba",     time:`${t.car} dk`  },
   ];
   return screen(`
     ${topbar("Yol Tarifi", "job-detail")}
@@ -1109,14 +1277,14 @@ function renderNavigation() {
         <div class="user-dot"></div>
       </div>
       <div class="map-pin pin-high" style="left:48%;top:30%">
-        <div class="pin-bubble">CL</div>
+        <div class="pin-bubble">${job.initials}</div>
         <div class="pin-tail"></div>
       </div>
     </div>
     <div class="directions-panel">
       <div>
-        <h3 style="font-size:15px;font-weight:700">Cafe Lumiere</h3>
-        <p class="body-sm">Moda Cad. No:42, Kadıköy</p>
+        <h3 style="font-size:15px;font-weight:700">${job.company}</h3>
+        <p class="body-sm">${job.location || "Kadıköy, İstanbul"}</p>
       </div>
       <div class="directions-options">
         ${modes.map(m => `
@@ -1135,7 +1303,7 @@ function renderResult() {
   return screen(`
     ${topbar("Görüşme Sonucu", "interview")}
     <div class="screen-body" style="padding-top:20px">
-      <p style="padding:0 18px 14px;font-size:14px;color:var(--text-2)">Teknomarket görüşmesi nasıl geçti?</p>
+      <p style="padding:0 18px 14px;font-size:14px;color:var(--text-2)">${(state.activeInterview?.name || matchItems[2]?.[0]?.name || "Görüşme")} görüşmesi nasıl geçti?</p>
       <div class="result-options">
         ${options.map(o => `
           <button class="result-option${state.selectedResult===o?" selected":""}" onclick="selectResult('${o}')">
@@ -1166,9 +1334,15 @@ const routes = {
   chat:          renderChat,
   profile:       renderProfile,
   settings:      renderSettings,
-  interview:     renderInterview,
-  navigation:    renderNavigation,
-  result:        renderResult,
+  interview:          renderInterview,
+  navigation:         renderNavigation,
+  result:             renderResult,
+  "settings-profile": renderSettingsProfile,
+  "settings-verify":  renderSettingsVerify,
+  "settings-notifs":  renderSettingsNotifs,
+  "settings-prefs":   renderSettingsPrefs,
+  "settings-location":renderSettingsLocation,
+  "settings-about":   renderSettingsAbout,
 };
 
 /* ─── RENDER ─────────────────────────────────────────────────────── */
@@ -1475,6 +1649,98 @@ function _appendMsg(cls, text, time) {
   list.scrollTop = list.scrollHeight;
 }
 
+/* ─── SETTINGS & PROFILE HELPERS ────────────────────────────────── */
+function toggleDarkMode() {
+  document.body.classList.toggle("light-mode");
+  localStorage.setItem("mw_theme", document.body.classList.contains("light-mode") ? "light" : "dark");
+  render();
+}
+
+function doLogout() {
+  window.MW?.AuthAPI.logout();
+  window.MW?.Socket.disconnect();
+  state.matchesList = [];
+  state.chatMessages = [];
+  state.chatMatchId = null;
+  go("auth");
+}
+
+function saveProfile() {
+  const name     = document.getElementById("sp-name")?.value.trim();
+  const role     = document.getElementById("sp-role")?.value.trim();
+  const location = document.getElementById("sp-location")?.value.trim();
+  const exp      = document.getElementById("sp-exp")?.value.trim();
+  const avail    = document.getElementById("sp-avail")?.value.trim();
+  if (name)     { user.name = name; user.short = name.split(" ")[0]; user.initials = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase(); }
+  if (role)     user.role = role;
+  if (location) user.location = location;
+  if (exp)      user.experience = exp;
+  if (avail)    user.availability = avail;
+  go("settings");
+}
+
+function removeSkill(index) {
+  user.skills.splice(index, 1);
+  render();
+}
+
+function addSkill() {
+  const name = prompt("Yeni yetenek:");
+  if (name?.trim()) { user.skills.push(name.trim()); render(); }
+}
+
+function markAllRead() {
+  state.notifications = (state.notifications.length ? state.notifications : _staticNotifs).map(n => ({...n, unread:false}));
+  document.querySelectorAll(".notif-item.unread").forEach(el => el.classList.remove("unread"));
+}
+
+function markNotifRead(i) {
+  if (state.notifications[i]) state.notifications[i].unread = false;
+  else if (_staticNotifs[i])  _staticNotifs[i].unread = false;
+}
+
+function toggleNotifPref(key) {
+  state.notifPrefs[key] = !state.notifPrefs[key];
+  render();
+}
+
+function togglePrefType(type) {
+  const idx = state.prefTypes.indexOf(type);
+  if (idx >= 0) state.prefTypes.splice(idx, 1);
+  else state.prefTypes.push(type);
+  render();
+}
+
+function setPrefRadius(r) {
+  state.prefRadius = r;
+  render();
+}
+
+function filterSwipeDeck(btn, tag) {
+  state.swipe.deckFilter = tag;
+  state.swipe.deckIndex  = 0;
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  btn.classList.add("active");
+  const deck = document.getElementById("card-deck");
+  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  const dp = document.getElementById("detail-pane");
+  if (dp) dp.innerHTML = renderDetailPane(currentSwipeJob());
+}
+
+function openInterview(name, initials, role) {
+  state.activeInterview = { name, initials, role };
+  go("interview");
+}
+
+async function refreshLocation() {
+  const btn = document.querySelector(".btn-primary");
+  if (btn) { btn.disabled = true; btn.textContent = "Konum alınıyor..."; }
+  const loc = await window.MW?.Location.get() || { lat:40.9906, lng:29.0250 };
+  user.location = `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`;
+  if (btn) { btn.disabled = false; btn.textContent = `${icon("ti-map-pin")} GPS ile Güncelle`; }
+  render();
+}
+
 /* ─── CHAT HELPERS ───────────────────────────────────────────────── */
 function formatTime(iso) {
   if (!iso) return "";
@@ -1623,6 +1889,7 @@ function demoLogin() {
 /* ─── BOOT ───────────────────────────────────────────────────────── */
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", async () => {
+  if (localStorage.getItem("mw_theme") === "light") document.body.classList.add("light-mode");
   if (window.MW?.Auth.isLoggedIn()) {
     await loadJobsFromAPI();
     if (!location.hash || location.hash === "#auth") location.hash = "home";
@@ -1641,4 +1908,8 @@ Object.assign(window, {
   selectResult, setRating, sendMessage,
   filterMapJobs, filterMapType, centerMapOnUser,
   doLogin, demoLogin, openChat, onChatTyping,
+  toggleDarkMode, doLogout, saveProfile, removeSkill, addSkill,
+  markAllRead, markNotifRead, toggleNotifPref,
+  togglePrefType, setPrefRadius, filterSwipeDeck,
+  openInterview, refreshLocation,
 });
