@@ -1839,42 +1839,219 @@ function renderMessages() {
     </div>`, bottomNav("messages"));
 }
 
+/* ── CHAT HUB HELPERS ──────────────────────────────────────────── */
+function getChatCtx() {
+  const company = state.chatMatch?.company || "Cafe Lumiere";
+  const inits   = state.chatMatch?.initials || "CL";
+  return MC_MATCHES.find(m => m.name === company) || {
+    name:company, initials:inits, role:"Barista", stage:"chatting",
+    score:85, dist:1.2, hue:"108,78,255", jobId:1, interview:null,
+  };
+}
+
+function chatQRHtml(stage) {
+  const sets = {
+    new:       ["👋 Merhaba!", "📋 CV göndereyim mi?", "📅 Ne zaman görüşebiliriz?", "✓ Müsaitim"],
+    chatting:  ["✓ Müsaitim", "📅 Yarın 14:00 olur mu?", "📋 Belgeleri gönderdim", "❓ Sorum var"],
+    interview: ["✓ Görüşmeye hazırım", "📅 Saati teyit eder misiniz?", "🔗 Link bekliyorum", "❓ Detay sorum var"],
+    hired:     ["🏆 Teşekkürler!", "📅 Başlangıç tarihi onaylıyorum", "📋 Evrak gönderebilirim"],
+  };
+  return (sets[stage] || sets.chatting).map(r =>
+    `<button class="ch-qr" onclick="sendQuickReply('${r.replace(/'/g,"\\'")}')">${r}</button>`
+  ).join("");
+}
+
+function sendQuickReply(text) {
+  const inp = document.getElementById("chat-input");
+  if (inp) { inp.value = text; sendMessage(); }
+}
+
+function toggleChatAttach() {
+  document.getElementById("ch-attach-sheet")?.classList.toggle("ch-attach-open");
+}
+
+function shareLocation() {
+  const mc = getChatCtx();
+  const html = `<div class="ch-loc-card">
+    <div class="ch-lc-map">📍</div>
+    <div class="ch-lc-info">
+      <div class="ch-lc-name">${mc.name}</div>
+      <div class="ch-lc-addr">Kadıköy, İstanbul · ${mc.dist} km</div>
+    </div>
+    <button class="ch-lc-btn" onclick="go('navigation')">Yol Tarifi Al →</button>
+  </div>`;
+  _appendChatBlock(html);
+}
+
+function shareDocument() {
+  const html = `<div class="ch-doc-card">
+    <span class="ch-dc-ic">📄</span>
+    <div><div class="ch-dc-name">Selin_Kaya_CV.pdf</div>
+    <div class="ch-dc-meta">PDF · 245 KB</div></div>
+  </div>`;
+  _appendChatBlock(html);
+}
+
+function shareProfile() {
+  const html = `<div class="ch-doc-card">
+    <span class="ch-dc-ic">👤</span>
+    <div><div class="ch-dc-name">${user.name} — Profil</div>
+    <div class="ch-dc-meta">${user.role} · ${user.experience}</div></div>
+  </div>`;
+  _appendChatBlock(html);
+}
+
+function proposeInterview() {
+  const html = `<div class="ch-prop-card">
+    <div class="ch-pc-hdr">📅 Görüşme Önerisi</div>
+    <div class="ch-pc-opt">Yarın · 14:00</div>
+    <div class="ch-pc-opt">Perşembe · 10:00</div>
+    <div class="ch-pc-opt">Cuma · 16:00</div>
+    <div class="ch-pc-note">Uygun gün seçilmesini bekliyorum.</div>
+  </div>`;
+  _appendChatBlock(html);
+}
+
+function acceptInterview() {
+  const mc = getChatCtx();
+  const iv = mc.interview || {date:"17 Haziran",time:"14:00"};
+  const card = document.querySelector(".ch-iv-card");
+  if (card) card.innerHTML = `<div class="ch-iv-accepted">✓ Görüşme Kabul Edildi — ${iv.date} · ${iv.time}</div>`;
+  const now = new Date();
+  const t   = now.getHours() + ":" + String(now.getMinutes()).padStart(2,"0");
+  _appendMsg("from-me", "✓ Görüşmeyi kabul ettim, görüşürüz!", t);
+}
+
+function declineInterview() {
+  document.querySelector(".ch-iv-card")?.remove();
+  const now = new Date();
+  const t   = now.getHours() + ":" + String(now.getMinutes()).padStart(2,"0");
+  _appendMsg("from-me", "Bu saat maalesef uygun değil, başka bir zaman önerebilir misiniz?", t);
+}
+
+function _appendChatBlock(html) {
+  const list = document.getElementById("messages-list");
+  if (!list) return;
+  const wrap = document.createElement("div");
+  wrap.className = "ch-bub ch-bub-out";
+  wrap.innerHTML = html;
+  list.appendChild(wrap);
+  list.scrollTop = list.scrollHeight;
+}
+
 /* CHAT */
 function renderChat() {
-  const match = state.chatMatch;
-  const name  = match?.company || "Cafe Lumiere";
-  const inits = match?.initials || "CL";
-  const statusTxt = state.chatTyping ? "● Yazıyor..." : "● Çevrimiçi";
+  const mc       = getChatCtx();
+  const stage    = mc.stage || "chatting";
+  const hue      = mc.hue  || "108,78,255";
+  const stageIdx = ["new","chatting","interview","hired"].indexOf(stage);
+  const stageColors = {
+    new:       {color:"#22c55e", label:"✦ Yeni Eşleşme"},
+    chatting:  {color:"#6C4EFF", label:"💬 Konuşma"},
+    interview: {color:"#f59e0b", label:"📅 Görüşme Var"},
+    hired:     {color:"#22c55e", label:"🏆 İşe Alındı"},
+  };
+  const sc  = stageColors[stage] || stageColors.chatting;
+  const iv  = mc.interview || null;
+  const statusTxt = state.chatTyping ? "● Yazıyor..." : `● Çevrimiçi · ${mc.dist} km`;
 
-  const msgHtml = state.chatMatchId
+  const bubbles = state.chatMatchId
     ? state.chatMessages.map(m => `
-        <div class="msg ${m.sender_type === "user" ? "from-me" : "from-other"}">
-          ${m.content}<div class="msg-time">${formatTime(m.created_at)}</div>
-        </div>`).join("") +
-      (state.chatMessages.length === 0
-        ? '<p style="text-align:center;color:var(--text-3);font-size:13px;margin-top:40px">Henüz mesaj yok. İlk mesajı sen gönder!</p>'
-        : "")
+        <div class="ch-bub ${m.sender_type === "user" ? "ch-bub-out" : "ch-bub-in"}">
+          <div class="ch-bub-text">${m.content}</div>
+          <div class="ch-bub-meta">${formatTime(m.created_at)}${m.sender_type === "user" ? '<span class="ch-read">✓✓</span>' : ""}</div>
+        </div>`)
     : state.messages.map(m => `
-        <div class="msg ${m.from === "me" ? "from-me" : "from-other"}">
-          ${m.text}<div class="msg-time">${m.time}</div>
-        </div>`).join("");
+        <div class="ch-bub ${m.from === "me" ? "ch-bub-out" : "ch-bub-in"}">
+          <div class="ch-bub-text">${m.text}</div>
+          <div class="ch-bub-meta">${m.time}${m.from === "me" ? '<span class="ch-read">✓✓</span>' : ""}</div>
+        </div>`);
+
+  const ivCardHtml = `
+    <div class="ch-iv-card">
+      <div class="ch-iv-card-hdr">📅 Görüşme Daveti</div>
+      <div class="ch-iv-detail">
+        <div class="ch-iv-row"><span class="ch-iv-ic">📅</span><span>${iv ? iv.date : "17 Haziran"} · ${iv ? iv.time : "14:00"}</span></div>
+        <div class="ch-iv-row"><span class="ch-iv-ic">🎥</span><span>${iv ? iv.type : "Video Görüşme"}</span></div>
+        <div class="ch-iv-row"><span class="ch-iv-ic">📍</span><span>${mc.name} · ${mc.dist} km uzakta</span></div>
+      </div>
+      <div class="ch-iv-actions">
+        <button class="ch-iv-decline" onclick="declineInterview()">✗ Başka Zaman</button>
+        <button class="ch-iv-accept" onclick="acceptInterview()">✓ Kabul Et</button>
+      </div>
+    </div>`;
+
+  const stepLabels = ["Eşleşme","Konuşma","Görüşme","İşe Alım"];
 
   return screen(`
-    <div class="chat-header">
-      <button class="topbar-action" onclick="go('messages')">${icon("ti-arrow-left")}</button>
-      <div class="chat-avatar">${inits}</div>
-      <div>
-        <p class="chat-name">${name}</p>
-        <p class="chat-status" id="chat-status">${statusTxt}</p>
+    <div class="ch-ctx-bar">
+      <button class="ch-back-btn" onclick="go('matches')">${icon("ti-arrow-left")}</button>
+      <div class="ch-av" style="background:rgba(${hue},.2);color:rgba(${hue},1)">${mc.initials}</div>
+      <div class="ch-ctx-info">
+        <div class="ch-ctx-name">${mc.name}</div>
+        <div class="ch-ctx-sub" id="chat-status">${statusTxt}</div>
       </div>
-      <button class="topbar-action" style="margin-left:auto">${icon("ti-phone")}</button>
+      <div class="ch-ctx-right">
+        <span class="ch-score-pill" style="color:${jdScoreColor(mc.score)}">${mc.score}%</span>
+        <button class="ch-ctx-job" onclick="openJob(${mc.jobId||1},'chat')" title="İlanı Gör">📋</button>
+      </div>
     </div>
-    <div class="messages-list" id="messages-list">${msgHtml}</div>
-    <div class="chat-input-row">
-      <input class="chat-input" id="chat-input" placeholder="Mesaj yaz..."
+
+    <div class="ch-stage-bar">
+      <span class="ch-stage-label" style="color:${sc.color}">${sc.label}</span>
+      <div class="ch-steps">
+        ${stepLabels.map((s, i) => `
+          <span class="ch-step${stageIdx >= i ? " ch-step-on" : ""}">${s}</span>
+          ${i < 3 ? '<span class="ch-step-sep">›</span>' : ""}`).join("")}
+      </div>
+    </div>
+
+    ${iv ? `
+    <div class="ch-iv-banner">
+      <div class="ch-iv-ban-l">
+        <span class="ch-iv-ban-ic">📅</span>
+        <div>
+          <div class="ch-iv-ban-title">${iv.date} · ${iv.time}</div>
+          <div class="ch-iv-ban-sub">${iv.type}</div>
+        </div>
+      </div>
+      <button class="ch-iv-ban-cta" onclick="go('interview')">Hazırım →</button>
+    </div>` : ""}
+
+    <div class="ch-thread" id="messages-list">
+      <div class="ch-sys">✦ ${mc.name} seninle eşleşti</div>
+      ${bubbles.join("")}
+      ${ivCardHtml}
+    </div>
+
+    <div class="ch-qr-bar" id="ch-qr-bar">
+      ${chatQRHtml(stage)}
+    </div>
+
+    <div class="ch-input-row">
+      <button class="ch-attach-btn" onclick="toggleChatAttach()">＋</button>
+      <input class="ch-input" id="chat-input" placeholder="Mesaj yaz..."
         onkeydown="if(event.key==='Enter')sendMessage()"
         oninput="onChatTyping()">
-      <button class="chat-send" onclick="sendMessage()">${icon("ti-send")}</button>
+      <button class="ch-send-btn" onclick="sendMessage()">➤</button>
+    </div>
+
+    <div class="ch-attach-sheet" id="ch-attach-sheet">
+      <div class="ch-as-handle"></div>
+      <div class="ch-as-grid">
+        <button class="ch-as-opt" onclick="shareLocation();toggleChatAttach()">
+          <span class="ch-as-ic">📍</span><span class="ch-as-lbl">Konum</span>
+        </button>
+        <button class="ch-as-opt" onclick="shareDocument();toggleChatAttach()">
+          <span class="ch-as-ic">📄</span><span class="ch-as-lbl">Belge</span>
+        </button>
+        <button class="ch-as-opt" onclick="proposeInterview();toggleChatAttach()">
+          <span class="ch-as-ic">📅</span><span class="ch-as-lbl">Görüşme Öner</span>
+        </button>
+        <button class="ch-as-opt" onclick="shareProfile();toggleChatAttach()">
+          <span class="ch-as-ic">👤</span><span class="ch-as-lbl">Profilim</span>
+        </button>
+      </div>
     </div>`);
 }
 
@@ -3505,8 +3682,15 @@ function _appendMsg(cls, text, time) {
   const list = document.getElementById("messages-list");
   if (!list) return;
   const div = document.createElement("div");
-  div.className = `msg ${cls}`;
-  div.innerHTML = `${text}<div class="msg-time">${time}</div>`;
+  if (list.classList.contains("ch-thread")) {
+    const isOut = cls === "from-me";
+    div.className = `ch-bub ${isOut ? "ch-bub-out" : "ch-bub-in"}`;
+    div.innerHTML = `<div class="ch-bub-text">${text}</div>
+      <div class="ch-bub-meta">${time}${isOut ? '<span class="ch-read">✓✓</span>' : ""}</div>`;
+  } else {
+    div.className = `msg ${cls}`;
+    div.innerHTML = `${text}<div class="msg-time">${time}</div>`;
+  }
   list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 }
@@ -3779,6 +3963,8 @@ Object.assign(window, {
   togglePrefType, setPrefRadius, filterSwipeDeck,
   toggleSpeedMode, showLikeExplosion, showSwipeToast, updateDeckInfo,
   setDetailMode, commitDetailInterest,
+  sendQuickReply, toggleChatAttach, shareLocation, shareDocument, shareProfile,
+  proposeInterview, acceptInterview, declineInterview,
   openInterview, refreshLocation,
   formatAuthPhone, submitAuthPhone, onRegOtpInput, onRegOtpKey,
   onRegNameInput, updateRegAvatar, cycleAvatarColor,
