@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Matchwork">
+  <rect width="512" height="512" rx="112" fill="#1c6fd7"/>
+  <path d="M142 176c0-28 22-50 50-50h128c28 0 50 22 50 50v24h18c25 0 46 21 46 46v108c0 25-21 46-46 46H124c-25 0-46-21-46-46V246c0-25 21-46 46-46h18v-24zm50-10c-6 0-10 4-10 10v24h148v-24c0-6-4-10-10-10H192z" fill="#fff"/>
+  <path d="M166 290h180" stroke="#1c6fd7" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="256" cy="290" r="26" fill="#15935b"/>
+</svg>

@@ -1,0 +1,1644 @@
+/* ═══════════════════════════════════════════════════════════════════
+   MATCHWORK — app.js  (vanilla JS SPA, hash routing)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── STATE ──────────────────────────────────────────────────────── */
+const state = {
+  selectedResult: "",
+  rating: 0,
+  messages: [
+    { from:"business", text:"Merhaba Selin, profilini inceledik. Hafta sonu vardiyası için görüşmek ister misin?", time:"14:08" },
+    { from:"me",       text:"Merhaba, uygunum. Vardiya saatleri nasıl olacak?", time:"14:10" },
+    { from:"business", text:"Cumartesi ve pazar 10:00-18:00. Kısa bir görüntülü görüşme planlayalım.", time:"14:12" }
+  ],
+  swipe: {
+    deckIndex:0, likedIds:[], skippedIds:[],
+    lastAction:null,
+    isDragging:false, startX:0, startY:0,
+    currentDeltaX:0, currentDeltaY:0,
+    thresholdReached:false, directionLocked:null,
+    activeCard:null,
+  },
+  detailJobId: 1,
+  detailSource: "home",
+  matchesTab: 0,
+  selectedPin: null,
+  sheetExpanded: false,
+  dirMode: "walk",
+  chatMatchId: null,
+  chatMatch: null,
+  chatMessages: [],
+  chatTyping: false,
+  matchesList: [],
+};
+
+/* ─── DATA ───────────────────────────────────────────────────────── */
+let _apiJobsLoaded = false;
+
+const user = {
+  name:"Selin Kaya", short:"Selin", initials:"SK",
+  role:"Barista · Satış Danışmanı", location:"Kadıköy, İstanbul",
+  matchScore:72, responseRate:"92%", rating:4.8,
+  verified:true, experience:"3 yıl",
+  availability:"Hafta sonu & Hafta içi akşam",
+  skills:["Kahve hazırlama","Kasa kullanımı","Müşteri iletişimi","Ekip çalışması","Ürün bilgisi"],
+  certs:["Barista Sertifikası","Gıda Hijyeni"],
+};
+
+let jobs = [
+  { id:1, title:"Barista", company:"Cafe Lumiere", initials:"CL",
+    sal:{ min:520, max:580, cur:"₺", per:"gün" },
+    distance:1.2, travel:{ walk:15, bus:6, car:4 },
+    matchScore:92, type:"Yarı zamanlı", pin:{ x:48, y:50, tier:"high" },
+    desc:"Sahil kenarında sakin ve modern bir kafe. Hafta sonu vardiyası, yemek dahil. Deneyimsiz adaylara açık, ekibimiz size her şeyi öğretir.",
+    req:["İletişim becerileri","Ekip çalışması","Esnek saat"],
+    benefits:["Yemek ikramı","Servis ikramı","Prim sistemi"],
+    schedule:"Cumartesi–Pazar 10:00–18:00",
+    tags:["Hafta sonu","Yemek dahil","Prim"],
+    hue:"108,78,255" },
+
+  { id:2, title:"Garson", company:"Beyaz Masa", initials:"BM",
+    sal:{ min:480, max:560, cur:"₺", per:"gün" },
+    distance:0.8, travel:{ walk:10, bus:4, car:3 },
+    matchScore:85, type:"Tam zamanlı", pin:{ x:62, y:38, tier:"high" },
+    desc:"Şehrin kalbinde köklü bir restoran. Tecrübeli bir ekiple çalışma fırsatı. Düzenli müşteri kitlesi, sakin çalışma ortamı.",
+    req:["Güler yüz","Dikkatli","Fiziksel dayanıklılık"],
+    benefits:["Yemek ikramı","Ulaşım desteği"],
+    schedule:"Hafta içi 11:00–20:00",
+    tags:["Tam zamanlı","Ulaşım"],
+    hue:"34,197,94" },
+
+  { id:3, title:"Kurye", company:"HızlıGit", initials:"HG",
+    sal:{ min:600, max:700, cur:"₺", per:"gün" },
+    distance:2.1, travel:{ walk:25, bus:9, car:6 },
+    matchScore:78, type:"Serbest", pin:{ x:35, y:45, tier:"mid" },
+    desc:"Esnek saatler ve yüksek kazanç. Kendi hızınızda çalışın. Bisiklet veya motorsikletle teslimat yapabilirsiniz.",
+    req:["Sürücü belgesi (isteğe bağlı)","Fiziksel form","Telefon"],
+    benefits:["Esnek saat","Yakıt desteği","Hızlı ödeme"],
+    schedule:"Esnek — haftanın 7 günü",
+    tags:["Esnek","Yüksek kazanç","Serbest"],
+    hue:"245,158,11" },
+
+  { id:4, title:"Kasa Görevlisi", company:"Teknomarket", initials:"TM",
+    sal:{ min:490, max:540, cur:"₺", per:"gün" },
+    distance:1.8, travel:{ walk:22, bus:8, car:5 },
+    matchScore:80, type:"Yarı zamanlı", pin:{ x:55, y:65, tier:"mid" },
+    desc:"Büyük bir teknoloji perakende zinciri. Kasa ve iade işlemlerine yardım. Teknolojiyle iç içe bir iş ortamı.",
+    req:["Kasa deneyimi","Dikkatli sayım","Müşteri odaklılık"],
+    benefits:["Çalışan indirimi","SGK","Yemek kartı"],
+    schedule:"Haftaiçi 14:00–20:00",
+    tags:["SGK","İndirim","Hafta içi"],
+    hue:"239,68,68" },
+
+  { id:5, title:"Güvenlik Görevlisi", company:"SafeGuard", initials:"SG",
+    sal:{ min:550, max:620, cur:"₺", per:"gün" },
+    distance:3.4, travel:{ walk:40, bus:14, car:8 },
+    matchScore:75, type:"Tam zamanlı", pin:{ x:72, y:55, tier:"mid" },
+    desc:"AVM güvenlik ekibi. Güvenli ve sakin iş ortamı. Düzenli mola ve yemek aralıkları.",
+    req:["Güvenlik belgesi (yoksa verilebilir)","Dikkat","Soğukkanlılık"],
+    benefits:["SGK","Yemek","Üniforma"],
+    schedule:"Gece/Gündüz vardiyalı",
+    tags:["SGK","Vardiyalı","Üniforma"],
+    hue:"139,92,255" },
+
+  { id:6, title:"Satış Temsilcisi", company:"ModaPlus", initials:"MP",
+    sal:{ min:500, max:650, cur:"₺", per:"gün" },
+    distance:1.5, travel:{ walk:18, bus:7, car:4 },
+    matchScore:88, type:"Yarı zamanlı", pin:{ x:40, y:30, tier:"high" },
+    desc:"Kadıköy'ün en popüler giyim mağazalarından biri. Prim sistemiyle yüksek kazanç imkânı. Genç ve dinamik ekip.",
+    req:["Satış yeteneği","Stil bilgisi","Müşteri iletişimi"],
+    benefits:["Prim","Çalışan indirimi","Esnek saat"],
+    schedule:"Cumartesi–Pazar 11:00–19:00",
+    tags:["Prim","Moda","Hafta sonu"],
+    hue:"34,197,94" },
+
+  { id:7, title:"Aşçı Yardımcısı", company:"Lezzet Durağı", initials:"LD",
+    sal:{ min:460, max:520, cur:"₺", per:"gün" },
+    distance:2.8, travel:{ walk:34, bus:12, car:7 },
+    matchScore:72, type:"Tam zamanlı", pin:{ x:58, y:35, tier:"mid" },
+    desc:"Aile işletmesi, ev yemeği tarzı restoran. Mutfakta temel hazırlık ve temizlik işleri. Sıcak çalışma ortamı.",
+    req:["Temel mutfak bilgisi","Hijyen sertifikası (isteğe bağlı)","Fiziksel dayanıklılık"],
+    benefits:["Öğle yemeği","Ulaşım desteği"],
+    schedule:"Hafta içi 08:00–16:00",
+    tags:["Öğle yemeği","Haftaiçi","Tam zamanlı"],
+    hue:"245,158,11" },
+
+  { id:8, title:"Çağrı Merkezi Temsilcisi", company:"NetCall", initials:"NC",
+    sal:{ min:480, max:580, cur:"₺", per:"gün" },
+    distance:1.1, travel:{ walk:13, bus:5, car:3 },
+    matchScore:82, type:"Yarı zamanlı", pin:{ x:25, y:62, tier:"high" },
+    desc:"Modern ofis ortamında müşteri hizmetleri. Uzaktan çalışma seçeneği de mevcut. Hızlı kariyer ilerleme fırsatı.",
+    req:["İyi iletişim","Bilgisayar kullanımı","Sabır"],
+    benefits:["SGK","Uzaktan çalışma","Prim"],
+    schedule:"Esnek — 09:00–21:00 arası",
+    tags:["SGK","Uzaktan","Prim"],
+    hue:"108,78,255" },
+];
+
+const matchItems = [
+  [
+    { initials:"CL", name:"Cafe Lumiere",      role:"Barista",               time:"Şimdi",   preview:"Tebrikler! Profilin ilgimizi çekti ✦", unread:2, dot:"dot-new" },
+    { initials:"MP", name:"ModaPlus",           role:"Satış Temsilcisi",      time:"2 dk",    preview:"Merhaba, müsait misiniz?", unread:1, dot:"dot-new" },
+    { initials:"NC", name:"NetCall",            role:"Çağrı Mrk. Temsilcisi", time:"15 dk",   preview:"Profilinizi inceledik...", unread:0, dot:"dot-new" },
+  ],
+  [
+    { initials:"BM", name:"Beyaz Masa",         role:"Garson",                time:"Dün",     preview:"Yarın 14:00 müsait misiniz?", unread:1, dot:"dot-active" },
+    { initials:"SG", name:"SafeGuard",          role:"Güvenlik Görevlisi",    time:"2 gün",   preview:"Belgeleri ilettiniz mi?", unread:0, dot:"dot-active" },
+  ],
+  [
+    { initials:"TM", name:"Teknomarket",        role:"Kasa Görevlisi",        time:"17 Haz",  preview:"Görüşme 17 Haz 14:00 onaylandı", unread:0, dot:"dot-interview" },
+  ],
+  [
+    { initials:"LD", name:"Lezzet Durağı",      role:"Aşçı Yardımcısı",      time:"10 Haz",  preview:"İşe başlama tarihin 20 Haziran", unread:0, dot:"dot-hired" },
+  ],
+];
+const matchTabLabels = ["Yeni Eşleşme","Aktif Konuşma","Görüşme","İşe Alındı"];
+const matchTabCounts = [3,2,1,1];
+
+/* ─── ROUTING ────────────────────────────────────────────────────── */
+const navItems = [
+  ["home",     "ti-home",           "Ana Sayfa"],
+  ["nearby",   "ti-map-pin",        "Yakında"],
+  ["matches",  "ti-sparkles",       "Eşleşmeler"],
+  ["messages", "ti-message-circle", "Mesajlar"],
+  ["profile",  "ti-user",           "Profil"],
+];
+const navRoutes = navItems.map(n => n[0]);
+
+function currentRoute() {
+  return location.hash.replace(/^#\/?/, "") || "auth";
+}
+function go(route) {
+  location.hash = route;
+}
+
+/* ─── HELPERS ────────────────────────────────────────────────────── */
+function icon(cls) { return `<i class="${cls}" aria-hidden="true"></i>`; }
+
+function screen(content, nav = "") {
+  return `<section class="screen">${content}</section>${nav}`;
+}
+
+function topbar(title, backRoute, action = "") {
+  const back = backRoute
+    ? `<button class="topbar-action" onclick="go('${backRoute}')" aria-label="Geri">${icon("ti-arrow-left")}</button>`
+    : "";
+  return `<header class="topbar">${back}<h1 class="topbar-title">${title}</h1>${action}</header>`;
+}
+
+function bottomNav(active) {
+  return `<nav class="bottom-nav" aria-label="Gezinti">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-mark">✦</div>
+      <span class="sidebar-brand-text">Matchwork</span>
+    </div>
+    ${navItems.map(([route, ic, label]) => `
+      <button class="nav-item${active === route ? " active" : ""}" onclick="go('${route}')" aria-label="${label}">
+        ${icon(ic)}<span>${label}</span>
+      </button>`).join("")}
+  </nav>`;
+}
+
+function scorePillClass(s) { return s >= 85 ? "score-high" : s >= 70 ? "score-mid" : "score-low"; }
+function pinTier(s) { return s >= 85 ? "pin-high" : s >= 70 ? "pin-mid" : "pin-low"; }
+function scoreColor(s) { return s >= 85 ? "var(--success)" : s >= 70 ? "var(--primary)" : "var(--pin-low)"; }
+
+function svgRing(score, r, sw, fgColor, bgColor = "rgba(255,255,255,.15)") {
+  const c = 2 * Math.PI * r;
+  const fill = (score / 100) * c;
+  return `<svg viewBox="0 0 ${(r+sw)*2} ${(r+sw)*2}" width="100%" height="100%">
+    <circle cx="${r+sw}" cy="${r+sw}" r="${r}" fill="none" stroke="${bgColor}" stroke-width="${sw}"/>
+    <circle cx="${r+sw}" cy="${r+sw}" r="${r}" fill="none"
+      stroke="${fgColor}" stroke-width="${sw}" stroke-linecap="round"
+      stroke-dasharray="${fill.toFixed(1)} ${c.toFixed(1)}"
+      stroke-dashoffset="0" transform="rotate(-90,${r+sw},${r+sw})"/>
+  </svg>`;
+}
+
+function travelPills(t) {
+  return `<div class="featured-travel">
+    <div class="travel-pill">${icon("ti-walk")} ${t.walk} dk</div>
+    <div class="travel-pill">${icon("ti-bus")} ${t.bus} dk</div>
+    <div class="travel-pill">${icon("ti-car")} ${t.car} dk</div>
+  </div>`;
+}
+
+/* ─── JOB CARD COMPONENTS ────────────────────────────────────────── */
+function featuredCard(job) {
+  const fill = (job.matchScore / 100) * (2 * Math.PI * 22);
+  const circ = 2 * Math.PI * 22;
+  return `<div class="featured-card" onclick="openJob(${job.id},'home')">
+    <div class="featured-visual">
+      <div class="featured-initials">${job.initials}</div>
+      <div class="featured-match-ring">
+        <svg viewBox="0 0 60 60" style="transform:rotate(-90deg)">
+          <circle cx="30" cy="30" r="22" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="4"/>
+          <circle cx="30" cy="30" r="22" fill="none" stroke="${scoreColor(job.matchScore)}" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"/>
+        </svg>
+        <div class="featured-match-num">${job.matchScore}<span>%</span></div>
+      </div>
+      ${travelPills(job.travel)}
+    </div>
+    <div class="featured-body">
+      <div class="meta">
+        <span class="badge badge-success">Sana En Yakın</span>
+        <span class="badge badge-dim">${job.type}</span>
+      </div>
+      <h2>${job.title}</h2>
+      <p class="company">${job.company} · ${job.location || "Kadıköy"}</p>
+      <div class="featured-footer">
+        <div class="featured-salary">${job.sal.cur}${job.sal.min}–${job.sal.max}<span>/${job.sal.per}</span></div>
+        <span class="body-sm">${job.distance} km uzaklıkta</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function jobMiniCard(job) {
+  const sc = job.matchScore >= 85 ? "" : job.matchScore >= 70 ? " mid" : " low";
+  return `<div class="job-mini" onclick="openJob(${job.id},'home')">
+    <div class="job-mini-visual">
+      <span class="initials">${job.initials}</span>
+      <span class="job-mini-score${sc}">${job.matchScore}%</span>
+    </div>
+    <div class="job-mini-body">
+      <h3>${job.title}</h3>
+      <p class="co">${job.company}</p>
+      <p class="sal">${job.sal.cur}${job.sal.min}–${job.sal.max}<span>/${job.sal.per}</span></p>
+      <p class="job-mini-dist">${icon("ti-map-pin")} ${job.distance} km</p>
+    </div>
+  </div>`;
+}
+
+function jobRow(job) {
+  return `<div class="job-row" onclick="openJob(${job.id},'home')">
+    <div class="job-row-avatar">${job.initials}</div>
+    <div class="job-row-body">
+      <h3>${job.title}</h3>
+      <p class="co">${job.company}</p>
+      <div class="job-row-meta">
+        <span>${icon("ti-map-pin")} ${job.distance} km</span>
+        <span>${icon("ti-walk")} ${job.travel.walk} dk</span>
+        <span>${job.type}</span>
+      </div>
+    </div>
+    <div class="job-row-right">
+      <span class="job-row-sal">${job.sal.cur}${job.sal.min}<span>/${job.sal.per}</span></span>
+      <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+    </div>
+  </div>`;
+}
+
+/* ─── SCREENS ────────────────────────────────────────────────────── */
+
+/* AUTH */
+function renderAuth() {
+  return screen(`
+    <div class="auth-screen anim-fade-in">
+      <div class="auth-logo">
+        <div class="auth-logo-mark">✦</div>
+        <span class="auth-logo-text">Matchwork</span>
+      </div>
+      <p class="auth-tagline">Yakınındaki işleri keşfet, eşleş, çalış.</p>
+      <div class="input-group">
+        <label class="input-label">E-posta</label>
+        <input class="input-field" type="email" placeholder="ornek@email.com" value="selin@demo.com">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Şifre</label>
+        <input class="input-field" type="password" placeholder="••••••••" value="demo1234">
+      </div>
+      <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="doLogin()">Giriş Yap</button>
+      <div class="auth-divider">veya</div>
+      <button class="btn btn-ghost btn-full" onclick="demoLogin()">Demo ile Dene →</button>
+    </div>`);
+}
+
+/* HOME */
+function renderHome() {
+  const top4 = jobs.slice(0,4);
+  const newJobs = [...jobs].sort((a,b) => b.id - a.id).slice(0,5);
+  return screen(`
+    <div class="home-greeting">
+      <div class="home-greeting-row">
+        <div>
+          <p class="greeting-sub">Günaydın 👋</p>
+          <h1 class="greeting-name">${user.short}</h1>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
+          <div class="home-avatar" onclick="go('profile')">${user.initials}</div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-body">
+      <div class="quick-actions" style="margin-top:14px">
+        <div class="quick-action" onclick="go('discover')">
+          <div class="qa-icon primary">${icon("ti-compass")}</div>
+          <h3>Keşfet</h3>
+          <p>Kaydır & eşleş</p>
+        </div>
+        <div class="quick-action" onclick="go('nearby')">
+          <div class="qa-icon success">${icon("ti-map-pin")}</div>
+          <h3>Haritada</h3>
+          <p>Yakınındakiler</p>
+        </div>
+        <div class="quick-action" onclick="go('matches')">
+          <div class="qa-icon warning">${icon("ti-sparkles")}</div>
+          <h3>Eşleşmeler</h3>
+          <p>${matchTabCounts[0]} yeni</p>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div class="section-header">
+          <h2>Sana En Uygun</h2>
+          <a onclick="go('discover')">Hepsini gör</a>
+        </div>
+        ${featuredCard(jobs[0])}
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div class="section-header">
+          <h2>Yakınında</h2>
+          <a onclick="go('nearby')">Haritada gör</a>
+        </div>
+        <div class="h-scroll">
+          ${top4.map(j => jobMiniCard(j)).join("")}
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <div class="section-header">
+          <h2>Yeni İlanlar</h2>
+          <a onclick="go('discover')">Tümü</a>
+        </div>
+        <div class="job-list">
+          ${newJobs.map(j => jobRow(j)).join("")}
+        </div>
+      </div>
+    </div>`, bottomNav("home"));
+}
+
+/* NEARBY — Leaflet.js gerçek harita */
+let _leafletMap = null;
+let _leafletMarkers = {};
+
+function renderNearby() {
+  return screen(`
+    <div class="map-overlay-top">
+      <div class="map-search-row">
+        <button class="topbar-action" onclick="go('home')" style="flex-shrink:0">${icon("ti-arrow-left")}</button>
+        <div class="map-search">
+          ${icon("ti-search")}
+          <input type="search" id="map-search-input" placeholder="Kadıköy'de iş ara..."
+            oninput="filterMapJobs(this.value)">
+        </div>
+        <button class="topbar-action" style="flex-shrink:0" onclick="centerMapOnUser()">${icon("ti-map-pin")}</button>
+      </div>
+      <div class="map-chips">
+        <div class="chip active" onclick="filterMapType(this,'')">Tümü</div>
+        <div class="chip" onclick="filterMapType(this,'Yarı zamanlı')">Yarı zamanlı</div>
+        <div class="chip" onclick="filterMapType(this,'Tam zamanlı')">Tam zamanlı</div>
+        <div class="chip" onclick="filterMapType(this,'Serbest')">Serbest</div>
+      </div>
+    </div>
+
+    <div id="leaflet-map" style="flex:1;position:relative;z-index:0"></div>
+
+    <div class="bottom-sheet${state.sheetExpanded ? " expanded" : ""}" id="map-sheet" style="position:absolute;bottom:0;left:0;right:0;z-index:25">
+      <div class="sheet-handle-area" onclick="toggleSheet()">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <span class="sheet-title">Yakınındaki Fırsatlar</span>
+          <span class="sheet-count" id="sheet-job-count">${jobs.length} ilan</span>
+        </div>
+      </div>
+      <div class="sheet-cards" id="sheet-cards">
+        ${jobs.map(j => sheetCard(j)).join("")}
+      </div>
+    </div>`, bottomNav("nearby"));
+}
+
+function initLeafletMap() {
+  if (!window.L) return;          // Leaflet CDN yüklenmediyse çık
+  const el = document.getElementById("leaflet-map");
+  if (!el) return;
+
+  // Önceki haritayı temizle
+  if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
+  _leafletMarkers = {};
+
+  // Kadıköy merkezi
+  const center = [40.9906, 29.0250];
+  _leafletMap = L.map("leaflet-map", {
+    center, zoom: 15,
+    zoomControl: true,
+    attributionControl: false,
+  });
+
+  // OpenStreetMap tiles
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+  }).addTo(_leafletMap);
+
+  // Kullanıcı konumu (Leaflet divIcon)
+  const userIcon = L.divIcon({
+    html: '<div class="mw-user-pin"></div>',
+    className: "", iconSize: [16,16], iconAnchor: [8,8],
+  });
+  L.marker(center, { icon: userIcon, zIndexOffset: 1000 }).addTo(_leafletMap);
+
+  // Konum al → haritayı gerçek konuma taşı
+  if (window.MW?.Location) {
+    window.MW.Location.get().then(loc => {
+      if (loc) _leafletMap?.setView([loc.lat, loc.lng], 15);
+    });
+  }
+
+  // İş pinlerini ekle
+  addJobPinsToMap(jobs);
+}
+
+function addJobPinsToMap(jobList) {
+  if (!_leafletMap || !window.L) return;
+
+  // Eski pinleri temizle
+  Object.values(_leafletMarkers).forEach(m => m.remove());
+  _leafletMarkers = {};
+
+  jobList.forEach(job => {
+    const tier = job.matchScore >= 85 ? "high" : job.matchScore >= 70 ? "mid" : "low";
+    const icon = L.divIcon({
+      html: `<div class="mw-pin ${tier}" id="lpin-${job.id}">${job.matchScore}%</div>`,
+      className: "", iconSize: null, iconAnchor: [22, 32],
+    });
+
+    const lat = job.pin?.lat || (40.9906 + (job.pin?.y - 50) * 0.002);
+    const lng = job.pin?.lng || (29.0250 + (job.pin?.x - 50) * 0.003);
+
+    const marker = L.marker([lat, lng], { icon })
+      .addTo(_leafletMap)
+      .on("click", () => selectPin(job.id));
+
+    _leafletMarkers[job.id] = marker;
+  });
+}
+
+function centerMapOnUser() {
+  if (!_leafletMap || !window.MW?.Location) return;
+  window.MW.Location.get().then(loc => {
+    if (loc) _leafletMap.flyTo([loc.lat, loc.lng], 15, { duration: 0.8 });
+  });
+}
+
+function filterMapJobs(q) {
+  const filtered = q
+    ? jobs.filter(j => j.title.toLowerCase().includes(q.toLowerCase()) || j.company.toLowerCase().includes(q.toLowerCase()))
+    : jobs;
+  addJobPinsToMap(filtered);
+  const cards = document.getElementById("sheet-cards");
+  const count = document.getElementById("sheet-job-count");
+  if (cards) cards.innerHTML = filtered.map(j => sheetCard(j)).join("");
+  if (count) count.textContent = `${filtered.length} ilan`;
+}
+
+function filterMapType(btn, type) {
+  document.querySelectorAll(".map-chips .chip").forEach(c => c.classList.remove("active"));
+  btn.classList.add("active");
+  const filtered = type ? jobs.filter(j => j.type === type) : jobs;
+  addJobPinsToMap(filtered);
+  const cards = document.getElementById("sheet-cards");
+  const count = document.getElementById("sheet-job-count");
+  if (cards) cards.innerHTML = filtered.map(j => sheetCard(j)).join("");
+  if (count) count.textContent = `${filtered.length} ilan`;
+}
+
+function sheetCard(job) {
+  const active = state.selectedPin === job.id ? " active" : "";
+  return `<div class="sheet-card${active}" onclick="openJob(${job.id},'nearby')">
+    <div class="sheet-card-top">
+      <div>
+        <h3>${job.title}</h3>
+        <p class="co">${job.company}</p>
+      </div>
+      <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+    </div>
+    <div class="sheet-card-meta">
+      <span>${icon("ti-map-pin")} ${job.distance} km</span>
+      <span>${icon("ti-walk")} ${job.travel.walk} dk</span>
+      <span>${job.type}</span>
+    </div>
+    <div class="sheet-card-footer">
+      <span class="sheet-card-sal">${job.sal.cur}${job.sal.min}–${job.sal.max}/${job.sal.per}</span>
+      <span class="caption">Detay →</span>
+    </div>
+  </div>`;
+}
+
+/* DISCOVER */
+function currentSwipeJob() {
+  return jobs[state.swipe.deckIndex % jobs.length];
+}
+
+function renderSwipeCard(job, slot) {
+  const isTop = slot === 0;
+  const scaleVar = slot === 0 ? "" : slot === 1 ? " back-1" : " back-2";
+  const tier = pinTier(job.matchScore);
+  const matchClass = job.matchScore >= 85 ? "" : job.matchScore >= 70 ? " mid" : " low";
+  return `<div class="swipe-card${isTop ? " top-card" : ""}${scaleVar}" id="${isTop ? "top-card" : `back-card-${slot}`}">
+    ${isTop ? `
+      <div class="swipe-overlay like-overlay" id="like-ol"><div class="swipe-label">İlgileniyorum</div></div>
+      <div class="swipe-overlay pass-overlay" id="pass-ol"><div class="swipe-label">Geç</div></div>
+      <div class="swipe-overlay detail-overlay" id="detail-ol"><div class="swipe-label">Detayları Gör</div></div>
+    ` : ""}
+    <div class="card-visual">
+      <div class="big-initials">${job.initials}</div>
+      <div class="card-match-badge${matchClass}">${job.matchScore}% Uyum</div>
+      <div class="card-type-badge">${job.type}</div>
+      <div class="card-mini-map">
+        <div class="mini-road h" style="top:40%"></div>
+        <div class="mini-road h" style="top:70%"></div>
+        <div class="mini-road v" style="left:40%"></div>
+        <div class="mini-road v" style="left:75%"></div>
+        <div class="card-mini-pin" style="left:${job.pin.x}%;top:${job.pin.y}%"></div>
+        <div class="card-mini-user" style="left:52%;top:56%"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-title-row">
+        <h2 class="card-title">${job.title}</h2>
+        <span style="font-size:20px;color:var(--text-3);font-weight:800">${job.initials.charAt(0)}</span>
+      </div>
+      <p class="card-company">${job.company} · ${job.sal.cur}${job.sal.min}–${job.sal.max}/${job.sal.per}</p>
+      <div class="card-stats">
+        <span class="card-stat">${icon("ti-map-pin")} ${job.distance} km</span>
+        <span class="card-stat">${icon("ti-briefcase")} ${job.type}</span>
+        <span class="card-stat">${icon("ti-clock")} ${job.schedule.split(" ").slice(-1)[0]}</span>
+      </div>
+      <div class="card-tags">
+        ${job.tags.map(t => `<span class="card-tag">${t}</span>`).join("")}
+      </div>
+    </div>
+    <div class="travel-row">
+      <span class="travel-item">${icon("ti-walk")} ${job.travel.walk} dk</span>
+      <span class="travel-item">${icon("ti-bus")} ${job.travel.bus} dk</span>
+      <span class="travel-item">${icon("ti-car")} ${job.travel.car} dk</span>
+    </div>
+  </div>`;
+}
+
+function renderCardDeck() {
+  const total = jobs.length;
+  if (state.swipe.deckIndex >= total) {
+    return `<div class="empty-state">
+      <div class="empty-icon">✦</div>
+      <h2 class="empty-title">Hepsini Gördün!</h2>
+      <p class="empty-sub">Bu oturumda <strong>${state.swipe.likedIds.length}</strong> ilana ilgi gösterdin.</p>
+      <button class="btn btn-primary" style="margin-top:12px" onclick="resetDeck()">Yeniden Başla</button>
+    </div>`;
+  }
+  const cards = [];
+  for (let i = 2; i >= 0; i--) {
+    const idx = (state.swipe.deckIndex + i) % total;
+    cards.push(renderSwipeCard(jobs[idx], i));
+  }
+  return cards.join("");
+}
+
+function renderDetailPane(job) {
+  if (!job) return `<div class="empty-state"><div class="empty-icon">⊕</div>
+    <p class="empty-sub">Bir iş ilanı seçerek detaylarını burada görüntüle.</p></div>`;
+  return `<div style="padding:24px 20px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <div style="width:52px;height:52px;border-radius:var(--r-sm);background:linear-gradient(135deg,rgba(${job.hue},.3),rgba(${job.hue},.1));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--text-2);">${job.initials}</div>
+      <div>
+        <h2 style="font-size:18px;font-weight:800">${job.title}</h2>
+        <p style="font-size:13px;color:var(--text-2)">${job.company}</p>
+      </div>
+      <span class="score-pill ${scorePillClass(job.matchScore)}" style="margin-left:auto">${job.matchScore}%</span>
+    </div>
+    <p style="font-size:14px;color:var(--text-2);line-height:1.6;margin-bottom:16px">${job.desc}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      ${job.tags.map(t => `<span class="chip active">${t}</span>`).join("")}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="openJob(${job.id},'discover')">Detayları Gör</button>
+      <button class="btn btn-success" style="flex:1" onclick="swipeCard('right')">İlgileniyorum</button>
+    </div>
+  </div>`;
+}
+
+function renderDiscover() {
+  const job = currentSwipeJob();
+  return screen(`
+    <div class="discover-layout">
+      <div class="deck-area">
+        <header class="topbar" style="padding:0 4px">
+          <button class="topbar-action" onclick="go('home')">${icon("ti-arrow-left")}</button>
+          <div class="topbar-logo">
+            <div class="topbar-logo-mark">✦</div>
+            <span class="topbar-logo-text">Keşfet</span>
+          </div>
+          <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
+        </header>
+        <div style="padding:0 4px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+          <div class="chip active">Tümü</div>
+          <div class="chip">Barista</div>
+          <div class="chip">Garson</div>
+          <div class="chip">Satış</div>
+          <div class="chip">Kurye</div>
+        </div>
+        <div class="card-deck" id="card-deck">${renderCardDeck()}</div>
+        <div class="swipe-actions">
+          <button class="swipe-btn swipe-undo" onclick="undoSwipe()" title="Geri Al">${icon("ti-undo")}</button>
+          <button class="swipe-btn swipe-pass" onclick="swipeCard('left')" title="Geç">${icon("ti-x")}</button>
+          <button class="swipe-btn swipe-detail" onclick="openJob(${job ? job.id : 1},'discover')" title="Detay">${icon("ti-arrow-up")}</button>
+          <button class="swipe-btn swipe-like" onclick="swipeCard('right')" title="İlgileniyorum">${icon("ti-heart")}</button>
+        </div>
+      </div>
+      <div class="detail-pane" id="detail-pane">${renderDetailPane(job)}</div>
+    </div>`, bottomNav(""));
+}
+
+/* JOB DETAIL */
+function openJob(id, source) {
+  state.detailJobId = id;
+  state.detailSource = source || "home";
+  go("job-detail");
+}
+
+function renderJobDetail() {
+  const job = jobs.find(j => j.id === state.detailJobId) || jobs[0];
+  const backRoute = state.detailSource === "discover" ? "discover" :
+                   state.detailSource === "nearby" ? "nearby" : "home";
+  const grad = `linear-gradient(135deg,rgba(${job.hue},.5) 0%,rgba(${job.hue},.15) 50%,var(--bg) 100%)`;
+  return screen(`
+    <div class="detail-hero" style="background:${grad}">
+      <div class="big-initials">${job.initials}</div>
+      <button class="detail-hero-back" onclick="go('${backRoute}')">${icon("ti-arrow-left")}</button>
+      <button class="detail-hero-save">${icon("ti-bookmark")}</button>
+      <div class="detail-score-badge">${job.matchScore}% Uyum</div>
+    </div>
+    <div class="detail-body">
+      <div class="detail-head">
+        <h1>${job.title}</h1>
+        <p class="company">${job.company} · ${job.location || "Kadıköy, İstanbul"}</p>
+        <div class="detail-kpis">
+          <div class="detail-kpi">
+            <span class="kpi-v" style="color:var(--success)">${job.sal.cur}${job.sal.min}</span>
+            <span class="kpi-l">Günlük Min</span>
+          </div>
+          <div class="detail-kpi">
+            <span class="kpi-v">${job.distance} km</span>
+            <span class="kpi-l">Mesafe</span>
+          </div>
+          <div class="detail-kpi">
+            <span class="kpi-v">${icon("ti-walk")} ${job.travel.walk}dk</span>
+            <span class="kpi-l">Yürüyerek</span>
+          </div>
+          <div class="detail-kpi">
+            <span class="kpi-v" style="color:var(--primary)">${job.type}</span>
+            <span class="kpi-l">Tip</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>İlan Hakkında</h3>
+        <p>${job.desc}</p>
+      </div>
+      <div class="detail-section">
+        <h3>Aranan Özellikler</h3>
+        <ul class="detail-list">${job.req.map(r => `<li>${r}</li>`).join("")}</ul>
+      </div>
+      <div class="detail-section">
+        <h3>Çalışma Saatleri</h3>
+        <p>${job.schedule}</p>
+      </div>
+      <div class="detail-section">
+        <h3>Yan Haklar</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
+          ${job.benefits.map(b => `<span class="badge badge-success">${b}</span>`).join("")}
+        </div>
+      </div>
+      <div class="detail-section">
+        <h3>Ulaşım Süresi</h3>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <div class="detail-kpi"><span class="kpi-v">${icon("ti-walk")} ${job.travel.walk}dk</span><span class="kpi-l">Yürüyerek</span></div>
+          <div class="detail-kpi"><span class="kpi-v">${icon("ti-bus")} ${job.travel.bus}dk</span><span class="kpi-l">Otobüs</span></div>
+          <div class="detail-kpi"><span class="kpi-v">${icon("ti-car")} ${job.travel.car}dk</span><span class="kpi-l">Araba</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="detail-ctas">
+      <button class="btn btn-ghost" style="flex:1" onclick="go('navigation')">
+        ${icon("ti-map-pin")} Yol Tarifi
+      </button>
+      <button class="btn btn-primary" style="flex:2" onclick="swipeCard('right');go('match')">
+        ${icon("ti-heart")} Eşleş
+      </button>
+    </div>`);
+}
+
+/* MATCH CELEBRATION */
+function renderMatch() {
+  const last = state.swipe.lastAction;
+  const job = last ? last.job : jobs[0];
+  return screen(`
+    <div class="match-celebrate anim-fade-in">
+      <div class="confetti-ring">
+        <div class="confetti-inner"><div class="emoji">✦</div></div>
+      </div>
+      <h1 class="h1" style="margin-bottom:8px">Yeni Eşleşme!</h1>
+      <p style="font-size:16px;color:var(--text-2);margin-bottom:6px">
+        <strong style="color:var(--text-1)">${job ? job.company : "İşveren"}</strong> seni beğendi
+      </p>
+      <p class="body-sm" style="margin-bottom:32px;max-width:260px">
+        ${job ? `${job.title} pozisyonu için mesajlaşmaya başlayabilirsin.` : ""}
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px">
+        <button class="btn btn-primary btn-full" onclick="go('messages')">
+          ${icon("ti-message-circle")} Mesaj Gönder
+        </button>
+        <button class="btn btn-ghost btn-full" onclick="go('discover')">
+          Keşfetmeye Devam Et
+        </button>
+      </div>
+    </div>`);
+}
+
+/* NOTIFICATIONS */
+function renderNotifications() {
+  const notifs = [
+    { icon:"✦", bg:"var(--primary-dim)", title:"Yeni Eşleşme", body:"Cafe Lumiere seni beğendi!", time:"Az önce", unread:true },
+    { icon:"◎", bg:"var(--success-dim)", title:"Mesaj", body:"Beyaz Masa: 'Yarın müsait misiniz?'", time:"10 dk", unread:true },
+    { icon:"▤", bg:"var(--warning-dim)", title:"Görüşme Hatırlatması", body:"Teknomarket görüşmen yarın 14:00'te", time:"1 saat", unread:false },
+    { icon:"⊙", bg:"var(--surface-3)",   title:"Profil Güncelleme", body:"Profilin tamamlanma oranı %72'de", time:"Dün", unread:false },
+    { icon:"↗", bg:"var(--primary-dim)", title:"Yeni İlanlar", body:"Bölgene 5 yeni ilan eklendi", time:"Dün", unread:false },
+  ];
+  return screen(`
+    ${topbar("Bildirimler", "home",
+      `<button class="topbar-action" style="font-size:12px;font-weight:700;color:var(--primary);width:auto;padding:0 8px" onclick="">Tümünü Oku</button>`)}
+    <div class="screen-body">
+      ${notifs.map(n => `
+        <div class="notif-item${n.unread ? " unread" : ""}">
+          <div class="notif-icon" style="background:${n.bg}">${n.icon}</div>
+          <div class="notif-body">
+            <h3>${n.title}</h3>
+            <p>${n.body}</p>
+          </div>
+          <span class="notif-time">${n.time}</span>
+        </div>`).join("")}
+    </div>`, bottomNav(""));
+}
+
+/* MATCHES */
+function renderMatches() {
+  const tab = state.matchesTab;
+  const items = matchItems[tab] || [];
+  return screen(`
+    ${topbar("Eşleşmeler")}
+    <div class="tab-bar">
+      ${matchTabLabels.map((l,i) => `
+        <button class="tab-btn${tab===i?" active":""}" onclick="setMatchesTab(${i})">
+          ${l}
+          <span class="tab-count">${matchTabCounts[i]}</span>
+        </button>`).join("")}
+    </div>
+    <div class="screen-body">
+      ${items.length ? items.map(m => `
+        <div class="match-card" onclick="go('chat')">
+          <div class="match-avatar">
+            ${m.initials}
+            <div class="match-status-dot ${m.dot}"></div>
+          </div>
+          <div class="match-body">
+            <h3>${m.name}</h3>
+            <p class="role">${m.role}</p>
+            <p class="preview">${m.preview}</p>
+          </div>
+          <div class="match-right">
+            <span class="match-time">${m.time}</span>
+            ${m.unread > 0 ? `<span class="match-unread">${m.unread}</span>` : ""}
+          </div>
+        </div>`).join("") :
+        `<div class="empty-state">
+          <div class="empty-icon">✦</div>
+          <h2 class="empty-title">Henüz yok</h2>
+          <p class="empty-sub">Bu kategoride henüz bir aktiviten yok.</p>
+        </div>`}
+    </div>`, bottomNav("matches"));
+}
+
+/* MESSAGES */
+function renderMessages() {
+  const list = state.matchesList;
+  const cards = list.length > 0
+    ? list.map(m => {
+        const co = m.jobs?.companies || {};
+        const lastMsg = m.last_message;
+        const preview = lastMsg ? lastMsg.content.slice(0, 60) : "Eşleşme oluştu! 🎉";
+        const timeStr = lastMsg ? formatTime(lastMsg.created_at) : formatTime(m.created_at);
+        return `
+        <div class="match-card" onclick="openChat('${m.id}','${(co.name||"").replace(/'/g,"\\'")}','${co.initials||"?"}')">
+          <div class="match-avatar">
+            ${co.initials || "?"}
+            <div class="match-status-dot dot-new"></div>
+          </div>
+          <div class="match-body">
+            <h3>${co.name || "?"}</h3>
+            <p class="role">${m.jobs?.title || ""}</p>
+            <p class="preview">${preview}</p>
+          </div>
+          <div class="match-right">
+            <span class="match-time">${timeStr}</span>
+            ${m.unread_count > 0 ? `<span class="match-unread">${m.unread_count}</span>` : ""}
+          </div>
+        </div>`;
+      }).join("")
+    : matchItems.flat().map(m => `
+        <div class="match-card" onclick="go('chat')">
+          <div class="match-avatar">${m.initials}<div class="match-status-dot ${m.dot}"></div></div>
+          <div class="match-body">
+            <h3>${m.name}</h3><p class="role">${m.role}</p><p class="preview">${m.preview}</p>
+          </div>
+          <div class="match-right">
+            <span class="match-time">${m.time}</span>
+            ${m.unread > 0 ? `<span class="match-unread">${m.unread}</span>` : ""}
+          </div>
+        </div>`).join("");
+
+  return screen(`
+    ${topbar("Mesajlar")}
+    <div class="screen-body">
+      ${cards || '<p style="text-align:center;color:var(--text-3);margin-top:60px">Henüz eşleşme yok.</p>'}
+    </div>`, bottomNav("messages"));
+}
+
+/* CHAT */
+function renderChat() {
+  const match = state.chatMatch;
+  const name  = match?.company || "Cafe Lumiere";
+  const inits = match?.initials || "CL";
+  const statusTxt = state.chatTyping ? "● Yazıyor..." : "● Çevrimiçi";
+
+  const msgHtml = state.chatMatchId
+    ? state.chatMessages.map(m => `
+        <div class="msg ${m.sender_type === "user" ? "from-me" : "from-other"}">
+          ${m.content}<div class="msg-time">${formatTime(m.created_at)}</div>
+        </div>`).join("") +
+      (state.chatMessages.length === 0
+        ? '<p style="text-align:center;color:var(--text-3);font-size:13px;margin-top:40px">Henüz mesaj yok. İlk mesajı sen gönder!</p>'
+        : "")
+    : state.messages.map(m => `
+        <div class="msg ${m.from === "me" ? "from-me" : "from-other"}">
+          ${m.text}<div class="msg-time">${m.time}</div>
+        </div>`).join("");
+
+  return screen(`
+    <div class="chat-header">
+      <button class="topbar-action" onclick="go('messages')">${icon("ti-arrow-left")}</button>
+      <div class="chat-avatar">${inits}</div>
+      <div>
+        <p class="chat-name">${name}</p>
+        <p class="chat-status" id="chat-status">${statusTxt}</p>
+      </div>
+      <button class="topbar-action" style="margin-left:auto">${icon("ti-phone")}</button>
+    </div>
+    <div class="messages-list" id="messages-list">${msgHtml}</div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" placeholder="Mesaj yaz..."
+        onkeydown="if(event.key==='Enter')sendMessage()"
+        oninput="onChatTyping()">
+      <button class="chat-send" onclick="sendMessage()">${icon("ti-send")}</button>
+    </div>`);
+}
+
+/* PROFILE */
+function renderProfile() {
+  const score = user.matchScore;
+  const fills = score * 2 * Math.PI * 52 / 100;
+  const circ  = 2 * Math.PI * 52;
+  const suggestions = [
+    { icon:"▧", label:"Profil Fotoğrafı Ekle", sub:"Görünürlüğünü %20 artır", pts:"+10 puan" },
+    { icon:"▦", label:"İş Deneyimi Ekle",       sub:"İşverenler daha kolay bulur",  pts:"+15 puan" },
+    { icon:"✓", label:"Sertifika Ekle",          sub:"Güvenilirliğini kanıtla",      pts:"+8 puan"  },
+  ];
+  return screen(`
+    ${topbar("Profilim", "", `<button class="topbar-action" onclick="go('settings')">${icon("ti-settings")}</button>`)}
+    <div class="screen-body">
+      <div class="profile-header">
+        <div class="profile-top">
+          <div class="profile-avatar">${user.initials}</div>
+          <div class="profile-info">
+            <h2>${user.name}</h2>
+            <p class="role">${user.role}</p>
+            <p class="loc">${icon("ti-map-pin")} ${user.location}</p>
+            <p class="profile-verified">${icon("ti-check")} Kimlik Doğrulandı</p>
+          </div>
+        </div>
+        <div class="profile-stats">
+          <div class="profile-stat">
+            <span class="profile-stat-val">${user.experience}</span>
+            <span class="profile-stat-lbl">Deneyim</span>
+          </div>
+          <div class="profile-stat">
+            <span class="profile-stat-val">${user.responseRate}</span>
+            <span class="profile-stat-lbl">Yanıt Oranı</span>
+          </div>
+          <div class="profile-stat">
+            <span class="profile-stat-val">★ ${user.rating}</span>
+            <span class="profile-stat-lbl">Puan</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section" style="display:flex;align-items:center;gap:20px">
+        <div class="score-ring">
+          <svg viewBox="0 0 120 120" style="transform:rotate(-90deg)">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+            <circle cx="60" cy="60" r="52" fill="none"
+              stroke="${scoreColor(score)}" stroke-width="8"
+              stroke-linecap="round"
+              stroke-dasharray="${fills.toFixed(1)} ${circ.toFixed(1)}"/>
+          </svg>
+          <div class="ring-center">
+            <span class="score-num" style="color:${scoreColor(score)}">${score}</span>
+            <span class="score-lbl">Uyum Puanı</span>
+          </div>
+        </div>
+        <div style="flex:1">
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">Profil Gücü</h3>
+          <p class="body-sm" style="margin-bottom:12px">3 adımda puanını 90'a çıkar</p>
+          <div class="progress-bar"><div class="progress-fill" style="width:${score}%"></div></div>
+          <p class="caption" style="margin-top:4px">${score}/100 · Çok İyi</p>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <p class="profile-section-title">Profilini Güçlendir</p>
+        ${suggestions.map(s => `
+          <div class="improve-card">
+            <div class="improve-icon">${s.icon}</div>
+            <div class="improve-body">
+              <h4>${s.label}</h4>
+              <p>${s.sub}</p>
+            </div>
+            <span class="improve-pts">${s.pts}</span>
+          </div>`).join("")}
+      </div>
+
+      <div class="profile-section">
+        <p class="profile-section-title">Yetenekler</p>
+        <div class="skill-grid">
+          ${user.skills.map(s => `<span class="skill-chip">${s}</span>`).join("")}
+          ${user.certs.map(c => `<span class="skill-chip" style="background:var(--success-dim);color:var(--success);border-color:rgba(34,197,94,.25)">${icon("ti-badge")} ${c}</span>`).join("")}
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <p class="profile-section-title">Tercihler</p>
+        <div class="job-list">
+          <div class="job-row" style="border-radius:var(--r-sm)">
+            <span style="font-size:16px">⚡</span>
+            <div class="job-row-body"><h3>Müsaitlik</h3><p class="co">${user.availability}</p></div>
+          </div>
+          <div class="job-row" style="border-radius:var(--r-sm)">
+            <span style="font-size:16px">₺</span>
+            <div class="job-row-body"><h3>Beklenti</h3><p class="co">Günlük ₺500–700</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:16px 18px 32px">
+        <button class="btn btn-ghost btn-full" onclick="go('settings')">
+          ${icon("ti-settings")} Ayarlar
+        </button>
+      </div>
+    </div>`, bottomNav("profile"));
+}
+
+/* SETTINGS */
+function renderSettings() {
+  return screen(`
+    ${topbar("Ayarlar", "profile")}
+    <div class="screen-body">
+      <div class="settings-group">
+        <p class="settings-group-title">Hesap</p>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--primary-dim);color:var(--primary)">⊙</div><div class="settings-row-body"><h3>Profil Düzenle</h3><p>İsim, fotoğraf, beceriler</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--success-dim);color:var(--success)">◈</div><div class="settings-row-body"><h3>Kimlik Doğrulama</h3><p>Doğrulandı ✓</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--warning-dim);color:var(--warning)">◉</div><div class="settings-row-body"><h3>Bildirimler</h3><p>Push, e-posta ayarları</p></div><span class="settings-row-right">→</span></div>
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">Tercihler</p>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⊞</div><div class="settings-row-body"><h3>İş Tercihleri</h3><p>Yarı zamanlı, hafta sonu</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">◉</div><div class="settings-row-body"><h3>Konum</h3><p>Kadıköy, 5 km yarıçap</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row">
+          <div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⌘</div>
+          <div class="settings-row-body"><h3>Karanlık Mod</h3><p>Uygulama genelinde</p></div>
+          <div class="toggle on"><div class="toggle-knob"></div></div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <p class="settings-group-title">Uygulama</p>
+        <div class="settings-row"><div class="settings-row-icon" style="background:var(--surface-3);color:var(--text-2)">⋄</div><div class="settings-row-body"><h3>Hakkında</h3><p>Matchwork v2.0</p></div><span class="settings-row-right">→</span></div>
+        <div class="settings-row" onclick="go('auth')"><div class="settings-row-icon" style="background:var(--danger-dim);color:var(--danger)">✕</div><div class="settings-row-body"><h3 style="color:var(--danger)">Çıkış Yap</h3></div></div>
+      </div>
+    </div>`, bottomNav(""));
+}
+
+/* INTERVIEW */
+function renderInterview() {
+  return screen(`
+    ${topbar("Görüşme Detayı", "matches")}
+    <div class="screen-body">
+      <div class="interview-card">
+        <div class="interview-header">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <div class="match-avatar" style="width:44px;height:44px">TM</div>
+            <div>
+              <h3 style="font-weight:800">Teknomarket</h3>
+              <p style="font-size:13px;color:var(--text-2)">Kasa Görevlisi</p>
+            </div>
+            <span class="badge badge-warning" style="margin-left:auto">Beklemede</span>
+          </div>
+        </div>
+        <div class="interview-time-block">
+          <div>
+            <div class="interview-date-big">17</div>
+            <div class="interview-date-month">Haziran 2026</div>
+          </div>
+          <div>
+            <p style="font-size:18px;font-weight:800">14:00</p>
+            <p style="font-size:12px;color:var(--text-2)">Görüntülü Görüşme</p>
+          </div>
+        </div>
+        <div style="padding:14px 18px;border-bottom:.5px solid var(--border)">
+          <p class="body-sm">Görüşme bağlantısı e-posta ile paylaşılacak. Görüntülü aramaya hazır ol.</p>
+        </div>
+        <div class="interview-actions">
+          <button class="btn btn-danger" style="flex:1">Reddet</button>
+          <button class="btn btn-success" style="flex:2" onclick="go('result')">Onayla</button>
+        </div>
+      </div>
+    </div>`, bottomNav(""));
+}
+
+/* NAVIGATION */
+function renderNavigation() {
+  const modes = [
+    { key:"walk", icon:"♟", label:"Yürüyerek", time:"15 dk" },
+    { key:"bus",  icon:"▣", label:"Otobüs",    time:"6 dk"  },
+    { key:"car",  icon:"◈", label:"Araba",     time:"4 dk"  },
+  ];
+  return screen(`
+    ${topbar("Yol Tarifi", "job-detail")}
+    <div class="directions-map">
+      <div class="dir-grid"></div>
+      <div class="route-visual">
+        <div class="route-dots">
+          <div class="route-start"></div>
+          <div class="route-line-v"></div>
+          <div class="route-end"></div>
+        </div>
+      </div>
+      <div class="map-user" style="left:50%;top:60%">
+        <div class="user-ring"></div>
+        <div class="user-dot"></div>
+      </div>
+      <div class="map-pin pin-high" style="left:48%;top:30%">
+        <div class="pin-bubble">CL</div>
+        <div class="pin-tail"></div>
+      </div>
+    </div>
+    <div class="directions-panel">
+      <div>
+        <h3 style="font-size:15px;font-weight:700">Cafe Lumiere</h3>
+        <p class="body-sm">Moda Cad. No:42, Kadıköy</p>
+      </div>
+      <div class="directions-options">
+        ${modes.map(m => `
+          <div class="dir-option${state.dirMode===m.key?" active":""}" onclick="setDirMode('${m.key}')">
+            <span class="dicon">${m.icon}</span>
+            <span class="dtime">${m.time}</span>
+            <span class="dlabel">${m.label}</span>
+          </div>`).join("")}
+      </div>
+    </div>`);
+}
+
+/* RESULT */
+function renderResult() {
+  const options = ["İşe Alındım 🎉","Reddedildim","Teklif Bekliyorum","İptal Edildi"];
+  return screen(`
+    ${topbar("Görüşme Sonucu", "interview")}
+    <div class="screen-body" style="padding-top:20px">
+      <p style="padding:0 18px 14px;font-size:14px;color:var(--text-2)">Teknomarket görüşmesi nasıl geçti?</p>
+      <div class="result-options">
+        ${options.map(o => `
+          <button class="result-option${state.selectedResult===o?" selected":""}" onclick="selectResult('${o}')">
+            ${o}
+          </button>`).join("")}
+      </div>
+      <div class="stars">
+        ${[1,2,3,4,5].map(n => `
+          <button class="star-btn${state.rating>=n?" on":""}" onclick="setRating(${n})">★</button>`).join("")}
+      </div>
+      <div style="padding:20px 18px">
+        <button class="btn btn-primary btn-full" onclick="go('matches')">Kaydet</button>
+      </div>
+    </div>`, bottomNav(""));
+}
+
+/* ─── ROUTER MAP ─────────────────────────────────────────────────── */
+const routes = {
+  auth:          renderAuth,
+  home:          renderHome,
+  nearby:        renderNearby,
+  discover:      renderDiscover,
+  "job-detail":  renderJobDetail,
+  match:         renderMatch,
+  notifications: renderNotifications,
+  matches:       renderMatches,
+  messages:      renderMessages,
+  chat:          renderChat,
+  profile:       renderProfile,
+  settings:      renderSettings,
+  interview:     renderInterview,
+  navigation:    renderNavigation,
+  result:        renderResult,
+};
+
+/* ─── RENDER ─────────────────────────────────────────────────────── */
+function render() {
+  const route = currentRoute();
+  const fn = routes[route] || renderHome;
+  document.getElementById("app").innerHTML = fn();
+  if (route === "discover") initSwipeListeners();
+  if (route === "chat") {
+    const list = document.getElementById("messages-list");
+    if (list) list.scrollTop = list.scrollHeight;
+  }
+  if (route === "messages") {
+    requestAnimationFrame(() => loadMatchesList());
+  }
+  if (route === "nearby") {
+    // Leaflet haritayı başlat (DOM hazır olduğunda)
+    requestAnimationFrame(() => {
+      initLeafletMap();
+      if (state.sheetExpanded) {
+        const sheet = document.getElementById("map-sheet");
+        if (sheet) sheet.classList.add("expanded");
+      }
+    });
+  }
+  // Rota değişince eski haritayı temizle
+  if (route !== "nearby" && _leafletMap) {
+    _leafletMap.remove();
+    _leafletMap = null;
+    _leafletMarkers = {};
+  }
+}
+
+/* ─── SWIPE ENGINE ───────────────────────────────────────────────── */
+const SWIPE_THRESHOLD = 80;
+const UP_THRESHOLD    = 90;
+
+function initSwipeListeners() {
+  const card = document.getElementById("top-card");
+  if (!card) return;
+  card.addEventListener("pointerdown", onDragStart, { passive:false });
+  document.addEventListener("pointermove", onDragMove, { passive:false });
+  document.addEventListener("pointerup",   onDragEnd);
+  document.addEventListener("pointercancel", () => snapBack(card));
+  card.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") swipeCard("right");
+    if (e.key === "ArrowLeft")  swipeCard("left");
+    if (e.key === "ArrowUp")    openJob(currentSwipeJob()?.id || 1, "discover");
+  });
+  card.setAttribute("tabindex","0");
+  card.setAttribute("role","article");
+}
+
+function onDragStart(e) {
+  const sw = state.swipe;
+  sw.isDragging = true;
+  sw.startX = e.clientX; sw.startY = e.clientY;
+  sw.currentDeltaX = 0; sw.currentDeltaY = 0;
+  sw.thresholdReached = false; sw.directionLocked = null;
+  sw.activeCard = document.getElementById("top-card");
+  if (sw.activeCard) sw.activeCard.setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+
+function onDragMove(e) {
+  const sw = state.swipe;
+  if (!sw.isDragging || !sw.activeCard) return;
+  const dx = e.clientX - sw.startX;
+  const dy = e.clientY - sw.startY;
+  sw.currentDeltaX = dx;
+  sw.currentDeltaY = dy;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+
+  if (!sw.directionLocked) {
+    if (absDx > 8 || absDy > 8)
+      sw.directionLocked = absDy > absDx * 1.2 ? "y" : "x";
+  }
+
+  if (sw.directionLocked === "y" && dy < -40) {
+    sw.activeCard.style.transform = `translateY(${dy}px) scale(.97)`;
+    const detailOl = document.getElementById("detail-ol");
+    if (detailOl) detailOl.style.opacity = Math.min(1, (-dy - 40) / 50).toString();
+    const likeOl  = document.getElementById("like-ol");
+    const passOl  = document.getElementById("pass-ol");
+    if (likeOl) likeOl.style.opacity = "0";
+    if (passOl) passOl.style.opacity = "0";
+    return;
+  }
+
+  if (sw.directionLocked !== "x") return;
+  e.preventDefault();
+  const rot = (dx / 160) * 16;
+  sw.activeCard.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+
+  const t = Math.min(1, Math.max(0, (absDx - 30) / 60));
+  const likeOl = document.getElementById("like-ol");
+  const passOl = document.getElementById("pass-ol");
+  if (dx > 0) {
+    if (likeOl) likeOl.style.opacity = t.toString();
+    if (passOl) passOl.style.opacity = "0";
+  } else {
+    if (passOl) passOl.style.opacity = t.toString();
+    if (likeOl) likeOl.style.opacity = "0";
+  }
+  if (absDx >= SWIPE_THRESHOLD && !sw.thresholdReached) {
+    sw.thresholdReached = true;
+    navigator.vibrate?.(12);
+  }
+}
+
+function onDragEnd() {
+  const sw = state.swipe;
+  if (!sw.isDragging) return;
+  sw.isDragging = false;
+  const card = sw.activeCard;
+  if (!card) return;
+  document.removeEventListener("pointermove", onDragMove);
+  document.removeEventListener("pointerup", onDragEnd);
+
+  if (sw.directionLocked === "y" && sw.currentDeltaY < -UP_THRESHOLD) {
+    const job = currentSwipeJob();
+    if (job) { openJob(job.id, "discover"); return; }
+  }
+  if (sw.directionLocked === "x" && Math.abs(sw.currentDeltaX) >= SWIPE_THRESHOLD) {
+    const dir = sw.currentDeltaX > 0 ? "right" : "left";
+    animateCardOut(card, dir, () => commitSwipe(dir));
+    return;
+  }
+  snapBack(card);
+  initSwipeListeners();
+}
+
+function snapBack(card) {
+  if (!card) return;
+  card.style.transition = "transform .4s cubic-bezier(.34,1.56,.64,1)";
+  card.style.transform = "translateX(0) rotate(0deg) translateY(0) scale(1)";
+  const likeOl = document.getElementById("like-ol");
+  const passOl = document.getElementById("pass-ol");
+  const detOl  = document.getElementById("detail-ol");
+  [likeOl, passOl, detOl].forEach(el => { if (el) el.style.opacity = "0"; });
+  setTimeout(() => { card.style.transition = "none"; }, 400);
+}
+
+function animateCardOut(card, dir, callback) {
+  const flyX = dir === "right" ? window.innerWidth + 300 : -(window.innerWidth + 300);
+  const rot  = dir === "right" ? 30 : -30;
+  card.style.transition = "transform .42s cubic-bezier(.25,.46,.45,.94), opacity .35s";
+  card.style.transform  = `translateX(${flyX}px) rotate(${rot}deg)`;
+  card.style.opacity    = "0";
+  playSwipeSound(dir);
+  setTimeout(callback, 400);
+}
+
+function commitSwipe(dir) {
+  const job = currentSwipeJob();
+  if (!job) return;
+  state.swipe.lastAction = { direction:dir, job, deckIndex:state.swipe.deckIndex };
+  if (window.MW?.Auth.isLoggedIn()) {
+    window.MW.JobsAPI.swipe(job.id, dir).catch(() => {});
+  }
+  if (dir === "right") {
+    state.swipe.likedIds.push(job.id);
+    state.swipe.deckIndex++;
+    go("match");
+    return;
+  }
+  state.swipe.skippedIds.push(job.id);
+  state.swipe.deckIndex++;
+  const deck = document.getElementById("card-deck");
+  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+  const dp = document.getElementById("detail-pane");
+  if (dp) dp.innerHTML = renderDetailPane(currentSwipeJob());
+}
+
+function swipeCard(dir) {
+  const card = document.getElementById("top-card");
+  if (!card) return;
+  animateCardOut(card, dir, () => commitSwipe(dir));
+}
+
+function undoSwipe() {
+  const last = state.swipe.lastAction;
+  if (!last) return;
+  if (last.direction === "right") state.swipe.likedIds = state.swipe.likedIds.filter(id => id !== last.job.id);
+  else state.swipe.skippedIds = state.swipe.skippedIds.filter(id => id !== last.job.id);
+  state.swipe.deckIndex = last.deckIndex;
+  state.swipe.lastAction = null;
+  const deck = document.getElementById("card-deck");
+  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+}
+
+function resetDeck() {
+  state.swipe.deckIndex = 0;
+  state.swipe.likedIds = [];
+  state.swipe.skippedIds = [];
+  state.swipe.lastAction = null;
+  const deck = document.getElementById("card-deck");
+  if (deck) { deck.innerHTML = renderCardDeck(); initSwipeListeners(); }
+}
+
+function playSwipeSound(dir) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    const sf = dir === "right" ? 380 : 260;
+    const ef = dir === "right" ? 580 : 140;
+    osc.frequency.setValueAtTime(sf, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(ef, ctx.currentTime + .09);
+    gain.gain.setValueAtTime(.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .09);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + .09);
+  } catch(_) {}
+}
+
+/* ─── INTERACTION HANDLERS ───────────────────────────────────────── */
+function selectPin(jobId) {
+  state.selectedPin = jobId;
+
+  // Leaflet pin görselini güncelle
+  document.querySelectorAll(".mw-pin").forEach(p => p.classList.remove("selected"));
+  const lpinEl = document.getElementById(`lpin-${jobId}`);
+  if (lpinEl) lpinEl.classList.add("selected");
+
+  // Bottom sheet'i aç
+  const sheet = document.getElementById("map-sheet");
+  if (sheet) sheet.classList.add("expanded");
+  state.sheetExpanded = true;
+
+  // Sheet kartında seçili ilanı öne kaydır
+  const cards = document.getElementById("sheet-cards");
+  if (cards) {
+    const idx = jobs.findIndex(j => j.id === jobId);
+    const target = cards.children[idx];
+    if (target) target.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    // Aktif kartı vurgula
+    Array.from(cards.children).forEach((c, i) => c.classList.toggle("active", i === idx));
+  }
+
+  // Leaflet haritayı o konuma taşı
+  const marker = _leafletMarkers[jobId];
+  if (marker && _leafletMap) {
+    _leafletMap.panTo(marker.getLatLng(), { animate: true, duration: 0.4 });
+  }
+}
+
+function toggleSheet() {
+  state.sheetExpanded = !state.sheetExpanded;
+  const sheet = document.getElementById("map-sheet");
+  if (sheet) sheet.classList.toggle("expanded", state.sheetExpanded);
+}
+
+function setMatchesTab(i) {
+  state.matchesTab = i;
+  render();
+}
+
+function setDirMode(m) {
+  state.dirMode = m;
+  render();
+}
+
+function selectResult(r) {
+  state.selectedResult = r;
+  document.querySelectorAll(".result-option").forEach(el => {
+    el.classList.toggle("selected", el.textContent.trim() === r);
+  });
+}
+
+function setRating(n) {
+  state.rating = n;
+  document.querySelectorAll(".star-btn").forEach((el, i) => {
+    el.classList.toggle("on", i < n);
+  });
+}
+
+function sendMessage() {
+  const input = document.getElementById("chat-input");
+  if (!input || !input.value.trim()) return;
+  const content = input.value.trim();
+  input.value = "";
+
+  if (state.chatMatchId && window.MW?.Socket.connected) {
+    window.MW.Socket.sendMessage(state.chatMatchId, content);
+    const now = new Date().toISOString();
+    state.chatMessages.push({ sender_type:"user", content, created_at:now });
+    _appendMsg("from-me", content, formatTime(now));
+  } else {
+    const now = new Date();
+    const time = now.getHours() + ":" + String(now.getMinutes()).padStart(2,"0");
+    state.messages.push({ from:"me", text:content, time });
+    _appendMsg("from-me", content, time);
+  }
+}
+
+function _appendMsg(cls, text, time) {
+  const list = document.getElementById("messages-list");
+  if (!list) return;
+  const div = document.createElement("div");
+  div.className = `msg ${cls}`;
+  div.innerHTML = `${text}<div class="msg-time">${time}</div>`;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+
+/* ─── CHAT HELPERS ───────────────────────────────────────────────── */
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.getHours() + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+
+let _typingTimer = null;
+function onChatTyping() {
+  if (!state.chatMatchId || !window.MW?.Socket.connected) return;
+  window.MW.Socket.typingStart(state.chatMatchId);
+  clearTimeout(_typingTimer);
+  _typingTimer = setTimeout(() => window.MW.Socket.typingStop(state.chatMatchId), 2000);
+}
+
+async function openChat(matchId, companyName, companyInitials) {
+  state.chatMatchId = matchId;
+  state.chatMatch   = { company: companyName, initials: companyInitials };
+  state.chatMessages = [];
+  state.chatTyping   = false;
+
+  if (window.MW?.Socket.connected) {
+    window.MW.Socket.joinMatch(matchId);
+  }
+
+  try {
+    const msgs = await window.MW.MessagesAPI.list(matchId);
+    if (Array.isArray(msgs)) state.chatMessages = msgs;
+  } catch(e) {}
+
+  go('chat');
+}
+
+async function loadMatchesList() {
+  if (!window.MW?.Auth.isLoggedIn()) return;
+  try {
+    const data = await window.MW.MatchesAPI.list();
+    if (Array.isArray(data)) {
+      state.matchesList = data;
+      if (location.hash === "#messages") render();
+    }
+  } catch(e) {}
+}
+
+function initSocketListeners() {
+  if (!window.MW?.Socket.connected) return;
+
+  window.MW.Socket.onMessage(msg => {
+    if (msg.match_id !== state.chatMatchId) return;
+    if (msg.sender_type === "user") return; // kendi mesajımız, zaten ekledik
+    state.chatMessages.push(msg);
+    if (location.hash === "#chat") {
+      _appendMsg("from-other", msg.content, formatTime(msg.created_at));
+    }
+  });
+
+  window.MW.Socket.onTypingStart(() => {
+    state.chatTyping = true;
+    const el = document.getElementById("chat-status");
+    if (el) el.textContent = "● Yazıyor...";
+  });
+
+  window.MW.Socket.onTypingStop(() => {
+    state.chatTyping = false;
+    const el = document.getElementById("chat-status");
+    if (el) el.textContent = "● Çevrimiçi";
+  });
+}
+
+/* ─── API ENTEGRASYONU ───────────────────────────────────────────── */
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function mapFullApiJob(j, index, userLat, userLng) {
+  const distKm = (userLat != null && j.lat != null)
+    ? haversineKm(userLat, userLng, j.lat, j.lng)
+    : 1.5;
+  const walkMin = Math.max(1, Math.round(distKm * 1000 / 80));
+  const hues = ["108,78,255","34,197,94","245,158,11","239,68,68","139,92,255","20,184,166","251,113,133","96,165,250"];
+  const score = Math.min(95, Math.max(60, 72 + Math.round((j.salary_max - 520) / 5)));
+  const tier = score >= 85 ? "high" : score >= 70 ? "mid" : "low";
+  const co = j.companies || {};
+  return {
+    id: j.id,
+    title: j.title,
+    company: co.name || "?",
+    initials: co.initials || "??",
+    sal: { min: j.salary_min, max: j.salary_max, cur: j.currency || "₺", per: j.period || "gün" },
+    distance: +distKm.toFixed(1),
+    travel: { walk: walkMin, bus: Math.round(walkMin * 0.4), car: Math.round(walkMin * 0.27) },
+    matchScore: score,
+    type: j.type,
+    pin: { x: 20 + (index * 11) % 60, y: 30 + (index * 13) % 50, tier },
+    desc: j.description || "",
+    req: j.requirements || [],
+    benefits: j.benefits || [],
+    schedule: j.schedule || "",
+    tags: j.tags || [],
+    hue: hues[index % hues.length],
+  };
+}
+
+async function loadJobsFromAPI() {
+  if (!window.MW?.Auth.isLoggedIn()) return;
+  try {
+    const loc = await window.MW.Location.get();
+    const data = await window.MW.JobsAPI.list();
+    if (Array.isArray(data) && data.length > 0) {
+      jobs = data
+        .map((j, i) => mapFullApiJob(j, i, loc.lat, loc.lng))
+        .sort((a, b) => a.distance - b.distance);
+      _apiJobsLoaded = true;
+    }
+  } catch(e) {
+    console.warn("API yüklenemedi, demo verisi kullanılıyor:", e);
+  }
+}
+
+async function doLogin() {
+  const emailEl = document.querySelector('.auth-screen input[type="email"]');
+  const passEl  = document.querySelector('.auth-screen input[type="password"]');
+  if (!emailEl || !passEl) return;
+  const btn = document.querySelector('.auth-screen .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = "Giriş yapılıyor..."; }
+  const res = await window.MW.AuthAPI.login(emailEl.value.trim(), passEl.value);
+  if (!res.ok) {
+    if (btn) { btn.disabled = false; btn.textContent = "Giriş Yap"; }
+    alert(res.error || "Giriş başarısız");
+    return;
+  }
+  await loadJobsFromAPI();
+  window.MW.Socket.connect();
+  setTimeout(initSocketListeners, 1000);
+  go('home');
+}
+
+function demoLogin() {
+  go('home');
+}
+
+/* ─── BOOT ───────────────────────────────────────────────────────── */
+window.addEventListener("hashchange", render);
+window.addEventListener("DOMContentLoaded", async () => {
+  if (window.MW?.Auth.isLoggedIn()) {
+    await loadJobsFromAPI();
+    if (!location.hash || location.hash === "#auth") location.hash = "home";
+  } else {
+    if (!location.hash) location.hash = "auth";
+  }
+  render();
+  if ("serviceWorker" in navigator)
+    navigator.serviceWorker.register("service-worker.js").catch(() => {});
+});
+
+/* expose to inline onclick */
+Object.assign(window, {
+  go, render, openJob, swipeCard, undoSwipe, resetDeck,
+  selectPin, toggleSheet, setMatchesTab, setDirMode,
+  selectResult, setRating, sendMessage,
+  filterMapJobs, filterMapType, centerMapOnUser,
+  doLogin, demoLogin, openChat, onChatTyping,
+});
