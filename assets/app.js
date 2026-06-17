@@ -313,6 +313,151 @@ function jobRow(job) {
   </div>`;
 }
 
+/* ─── HOME CARD COMPONENTS ──────────────────────────────────────── */
+
+function heroCard(job) {
+  const circ = 2 * Math.PI * 22;
+  const fill = (job.matchScore / 100) * circ;
+  const distColor = job.distance < 1 ? "var(--success)" : job.distance < 3 ? "var(--primary)" : "var(--text-2)";
+  return `<div class="hero-card" onclick="openJob(${job.id},'home')">
+    <div class="hero-visual" style="background:linear-gradient(135deg,rgba(${job.hue},1) 0%,rgba(${job.hue},.25) 60%,#080E1F 100%)">
+      <div class="hero-initials">${job.initials}</div>
+      <div class="hero-ring">
+        <svg viewBox="0 0 60 60" style="transform:rotate(-90deg)">
+          <circle cx="30" cy="30" r="22" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="4"/>
+          <circle cx="30" cy="30" r="22" fill="none" stroke="${scoreColor(job.matchScore)}" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"/>
+        </svg>
+        <div class="hero-ring-num">${job.matchScore}<span>%</span></div>
+      </div>
+      <div class="hero-badges">
+        <span class="badge badge-success">✦ Sana En Uygun</span>
+        <span class="badge badge-dim">${job.type}</span>
+      </div>
+      <div class="featured-travel">
+        <div class="travel-pill">${icon("ti-walk")} ${job.travel.walk} dk</div>
+        <div class="travel-pill">${icon("ti-bus")} ${job.travel.bus} dk</div>
+        <div class="travel-pill">${icon("ti-car")} ${job.travel.car} dk</div>
+      </div>
+    </div>
+    <div class="hero-body">
+      <div class="hero-title-row">
+        <div>
+          <h2 class="hero-role">${job.title}</h2>
+          <p class="hero-company">${job.company} · Kadıköy</p>
+        </div>
+        <div class="hero-dist" style="color:${distColor}">
+          <span class="hero-dist-num">${job.distance}</span>
+          <span class="hero-dist-unit">km</span>
+        </div>
+      </div>
+      <p class="hero-reason">${job.desc.slice(0, 72)}…</p>
+      <div class="hero-footer">
+        <span class="hero-salary">${job.sal.cur}${job.sal.min}–${job.sal.max}<em>/${job.sal.per}</em></span>
+        <div class="hero-btns">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();go('navigation')">Yol Tarifi</button>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openJob(${job.id},'home')">Detaylar →</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function discCard(job) {
+  const circ = 2 * Math.PI * 16;
+  const fill = (job.matchScore / 100) * circ;
+  return `<div class="disc-card" onclick="openJob(${job.id},'home')">
+    <div class="disc-visual" style="background:linear-gradient(145deg,rgba(${job.hue},1) 0%,rgba(${job.hue},.35) 100%)">
+      <div class="disc-initials">${job.initials}</div>
+      <div class="disc-ring">
+        <svg viewBox="0 0 44 44" style="transform:rotate(-90deg)">
+          <circle cx="22" cy="22" r="16" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3"/>
+          <circle cx="22" cy="22" r="16" fill="none" stroke="${scoreColor(job.matchScore)}" stroke-width="3"
+            stroke-linecap="round" stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"/>
+        </svg>
+        <span class="disc-ring-num">${job.matchScore}%</span>
+      </div>
+    </div>
+    <div class="disc-body">
+      <h3 class="disc-role">${job.title}</h3>
+      <p class="disc-co">${job.company}</p>
+      <div class="disc-kpis">
+        <span class="disc-sal">${job.sal.cur}${job.sal.min}</span>
+        <span class="disc-dist">${icon("ti-map-pin")} ${job.distance} km</span>
+      </div>
+      <span class="disc-type">${job.type}</span>
+    </div>
+  </div>`;
+}
+
+function distCard(job) {
+  const distColor = job.distance < 1 ? "var(--success)" : job.distance < 3 ? "var(--primary)" : "var(--text-2)";
+  return `<div class="dist-card" onclick="openJob(${job.id},'home')">
+    <div class="dist-avatar" style="background:rgba(${job.hue},.18);color:rgba(${job.hue},1)">${job.initials}</div>
+    <div class="dist-body">
+      <div class="dist-top">
+        <div class="dist-info">
+          <h3 class="dist-role">${job.title}</h3>
+          <p class="dist-co">${job.company}</p>
+        </div>
+        <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+      </div>
+      <div class="dist-pills">
+        <span class="dist-pill">${icon("ti-walk")} ${job.travel.walk} dk</span>
+        <span class="dist-pill">${icon("ti-bus")} ${job.travel.bus} dk</span>
+        <span class="dist-pill">${icon("ti-car")} ${job.travel.car} dk</span>
+      </div>
+      <div class="dist-bottom">
+        <span class="dist-sal">${job.sal.cur}${job.sal.min}–${job.sal.max}/${job.sal.per}</span>
+        <span class="dist-km" style="color:${distColor}">📍 ${job.distance} km</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+const HOME_TIMESTAMPS = ["Az önce", "45 dk önce", "2 saat önce", "Bugün", "Dün"];
+function homeNewRow(job, i) {
+  return `<div class="job-row" onclick="openJob(${job.id},'home')">
+    <div class="job-row-avatar" style="background:rgba(${job.hue},.15);color:rgba(${job.hue},1)">${job.initials}</div>
+    <div class="job-row-body">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+        <h3>${job.title}</h3>
+        ${i === 0 ? '<span class="new-tag">YENİ</span>' : ""}
+      </div>
+      <p class="co">${job.company}</p>
+      <div class="job-row-meta">
+        <span>${icon("ti-map-pin")} ${job.distance} km</span>
+        <span>${icon("ti-walk")} ${job.travel.walk} dk</span>
+        <span>${job.type}</span>
+      </div>
+    </div>
+    <div class="job-row-right">
+      <span class="job-row-sal">${job.sal.cur}${job.sal.min}<span>/${job.sal.per}</span></span>
+      <span class="score-pill ${scorePillClass(job.matchScore)}">${job.matchScore}%</span>
+      <span class="new-time">${HOME_TIMESTAMPS[i] || "Bugün"}</span>
+    </div>
+  </div>`;
+}
+
+function trendCard(job) {
+  const views = 84 + job.id * 23 + job.matchScore;
+  return `<div class="disc-card" onclick="openJob(${job.id},'home')">
+    <div class="disc-visual" style="background:linear-gradient(145deg,rgba(${job.hue},.95) 0%,rgba(${job.hue},.35) 100%)">
+      <div class="disc-initials">${job.initials}</div>
+      <div class="trend-views-badge">👁 ${views}</div>
+    </div>
+    <div class="disc-body">
+      <h3 class="disc-role">${job.title}</h3>
+      <p class="disc-co">${job.company}</p>
+      <div class="disc-kpis">
+        <span class="disc-sal">${job.sal.cur}${job.sal.min}</span>
+        <span class="disc-dist">${icon("ti-map-pin")} ${job.distance} km</span>
+      </div>
+      <span class="disc-type" style="color:var(--warning)">◆ Trend</span>
+    </div>
+  </div>`;
+}
+
 /* ─── SCREENS ────────────────────────────────────────────────────── */
 
 /* AUTH — Phone-based entry */
@@ -356,68 +501,105 @@ function renderAuth() {
 
 /* HOME */
 function renderHome() {
-  const top4 = jobs.slice(0,4);
-  const newJobs = [...jobs].sort((a,b) => b.id - a.id).slice(0,5);
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar";
+  const byMatch = [...jobs].sort((a,b) => b.matchScore - a.matchScore);
+  const byDist  = [...jobs].sort((a,b) => a.distance - b.distance);
+  const byNew   = [...jobs].sort((a,b) => b.id - a.id);
+  const hero  = byMatch[0];
+  const recs  = byMatch.slice(1);
+  const near  = byDist;
+  const newJs = byNew.slice(0, 4);
+  const trend = byMatch.filter(j => j.id !== hero.id);
+  const catTags = [...new Set(jobs.flatMap(j => j.tags || []))].slice(0, 12);
+
   return screen(`
-    <div class="home-greeting">
-      <div class="home-greeting-row">
-        <div>
-          <p class="greeting-sub">Günaydın 👋</p>
-          <h1 class="greeting-name">${user.short}</h1>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="topbar-action" onclick="go('notifications')">${icon("ti-bell")}</button>
-          <div class="home-avatar" onclick="go('profile')">${user.initials}</div>
-        </div>
+    <div class="home-hdr">
+      <div class="home-hdr-left">
+        <p class="home-sub">${greeting} 👋</p>
+        <h1 class="home-name">${user.short}</h1>
+      </div>
+      <div class="home-hdr-right">
+        <button class="topbar-action" onclick="go('search')" aria-label="Arama">${icon("ti-search")}</button>
+        <button class="topbar-action home-bell-btn" onclick="go('notifications')" aria-label="Bildirimler">
+          ${icon("ti-bell")}<span class="home-bell-dot"></span>
+        </button>
+        <div class="home-avatar" onclick="go('profile')">${user.initials}</div>
       </div>
     </div>
-    <div class="screen-body">
-      <div class="quick-actions" style="margin-top:14px">
+
+    <div class="screen-body home-body">
+
+      <button class="home-pulse" onclick="go('discover')">
+        <span class="home-pulse-dot"></span>
+        <span>Kadıköy'de bugün <strong>${jobs.length} fırsat</strong> seni bekliyor</span>
+        <span class="home-pulse-arr">→</span>
+      </button>
+
+      ${heroCard(hero)}
+
+      <div class="quick-actions home-qa">
         <div class="quick-action" onclick="go('discover')">
           <div class="qa-icon primary">${icon("ti-compass")}</div>
-          <h3>Keşfet</h3>
-          <p>Kaydır & eşleş</p>
+          <h3>Keşfet</h3><p>Kaydır & eşleş</p>
         </div>
         <div class="quick-action" onclick="go('nearby')">
           <div class="qa-icon success">${icon("ti-map-pin")}</div>
-          <h3>Haritada</h3>
-          <p>Yakınındakiler</p>
+          <h3>Haritada</h3><p>Yakınındakiler</p>
         </div>
-        <div class="quick-action" onclick="go('matches')">
-          <div class="qa-icon warning">${icon("ti-sparkles")}</div>
-          <h3>Eşleşmeler</h3>
-          <p>${matchTabCounts[0]} yeni</p>
-        </div>
-      </div>
-
-      <div style="margin-bottom:16px">
-        <div class="section-header">
-          <h2>Sana En Uygun</h2>
-          <a onclick="go('discover')">Hepsini gör</a>
-        </div>
-        ${featuredCard(jobs[0])}
-      </div>
-
-      <div style="margin-bottom:16px">
-        <div class="section-header">
-          <h2>Yakınında</h2>
-          <a onclick="go('nearby')">Haritada gör</a>
-        </div>
-        <div class="h-scroll">
-          ${top4.map(j => jobMiniCard(j)).join("")}
+        <div class="quick-action home-qa-matches" onclick="go('matches')">
+          <div class="qa-icon warning" style="position:relative">
+            ${icon("ti-sparkles")}
+            ${matchTabCounts[0] > 0 ? `<span class="qa-badge">${matchTabCounts[0]}</span>` : ""}
+          </div>
+          <h3>Eşleşmeler</h3><p>${matchTabCounts[0]} yeni</p>
         </div>
       </div>
 
-      <div style="margin-bottom:24px">
-        <div class="section-header">
-          <h2>Yeni İlanlar</h2>
-          <a onclick="go('discover')">Tümü</a>
+      <div class="home-section">
+        <div class="home-sh">
+          <div class="home-sh-l"><span class="sh-ico">✦</span>Sana Özel</div>
+          <button class="home-sh-r" onclick="go('discover')">Hepsini gör →</button>
         </div>
-        <div class="job-list">
-          ${newJobs.map(j => jobRow(j)).join("")}
+        <div class="h-scroll">${recs.map(j => discCard(j)).join("")}</div>
+      </div>
+
+      <div class="home-section">
+        <div class="home-sh">
+          <div class="home-sh-l"><span class="sh-ico">◉</span>Yakınında</div>
+          <button class="home-sh-r" onclick="go('nearby')">Haritada gör →</button>
+        </div>
+        <div class="h-scroll">${near.map(j => distCard(j)).join("")}</div>
+      </div>
+
+      <div class="home-section">
+        <div class="home-sh">
+          <div class="home-sh-l"><span class="sh-ico">◎</span>Yeni Eklendi</div>
+          <button class="home-sh-r" onclick="go('discover')">Tümünü gör →</button>
+        </div>
+        <div class="home-new-list">${newJs.map((j,i) => homeNewRow(j,i)).join("")}</div>
+      </div>
+
+      <div class="home-section">
+        <div class="home-sh">
+          <div class="home-sh-l"><span class="sh-ico">◆</span>Trend</div>
+          <button class="home-sh-r" onclick="go('discover')">Tümünü gör →</button>
+        </div>
+        <div class="h-scroll">${trend.map(j => trendCard(j)).join("")}</div>
+      </div>
+
+      <div class="home-section home-cat-section">
+        <div class="home-sh">
+          <div class="home-sh-l"><span class="sh-ico">⊟</span>Kategori Keşfi</div>
+        </div>
+        <div class="h-scroll" style="padding-top:0">
+          ${catTags.map(tag => `<div class="home-cat-chip" onclick="go('discover')">${tag}</div>`).join("")}
         </div>
       </div>
-    </div>`, bottomNav("home"));
+
+      <div style="height:20px"></div>
+    </div>
+  `, bottomNav("home"));
 }
 
 /* NEARBY — Leaflet.js gerçek harita */
