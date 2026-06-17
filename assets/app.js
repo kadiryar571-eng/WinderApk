@@ -53,6 +53,8 @@ const state = {
   notifPrefs: { match:true, message:true, interview:true, email:true, promo:false },
   prefTypes: ["Yarı zamanlı","Tam zamanlı"],
   prefRadius: "5 km",
+  pfWorkStyles: ["flexible","evening","teamwork"],
+  pfInterests: ["Yeme-İçme","Perakende","Hizmet"],
 };
 
 /* ─── DATA ───────────────────────────────────────────────────────── */
@@ -2055,109 +2057,291 @@ function renderChat() {
     </div>`);
 }
 
-/* PROFILE */
-function renderProfile() {
-  const score = user.matchScore;
-  const fills = score * 2 * Math.PI * 52 / 100;
-  const circ  = 2 * Math.PI * 52;
-  const suggestions = [
-    { icon:"▧", label:"Profil Fotoğrafı Ekle", sub:"Görünürlüğünü %20 artır", pts:"+10 puan" },
-    { icon:"▦", label:"İş Deneyimi Ekle",       sub:"İşverenler daha kolay bulur",  pts:"+15 puan" },
-    { icon:"✓", label:"Sertifika Ekle",          sub:"Güvenilirliğini kanıtla",      pts:"+8 puan"  },
-  ];
-  return screen(`
-    ${topbar("Profilim", "", `<button class="topbar-action" onclick="go('settings')">${icon("ti-settings")}</button>`)}
-    <div class="screen-body">
-      <div class="profile-header">
-        <div class="profile-top">
-          <div class="profile-avatar">${user.initials}</div>
-          <div class="profile-info">
-            <h2>${user.name}</h2>
-            <p class="role">${user.role}</p>
-            <p class="loc">${icon("ti-map-pin")} ${user.location}</p>
-            <p class="profile-verified">${icon("ti-check")} Kimlik Doğrulandı</p>
-          </div>
-        </div>
-        <div class="profile-stats">
-          <div class="profile-stat">
-            <span class="profile-stat-val">${user.experience}</span>
-            <span class="profile-stat-lbl">Deneyim</span>
-          </div>
-          <div class="profile-stat">
-            <span class="profile-stat-val">${user.responseRate}</span>
-            <span class="profile-stat-lbl">Yanıt Oranı</span>
-          </div>
-          <div class="profile-stat">
-            <span class="profile-stat-val">★ ${user.rating}</span>
-            <span class="profile-stat-lbl">Puan</span>
-          </div>
+/* ─── PROFILE v2 ─── */
+const PF_STRENGTH_SEGS = [
+  { label:"Kimlik",    pct:100 },
+  { label:"Yetkinlik", pct:80  },
+  { label:"Deneyim",   pct:60  },
+  { label:"Müsaitlik", pct:100 },
+  { label:"Tercihler", pct:40  },
+];
+
+function pfOverallScore() {
+  return Math.round(PF_STRENGTH_SEGS.reduce((a,s) => a + s.pct, 0) / PF_STRENGTH_SEGS.length);
+}
+
+function pfSegColor(pct) {
+  return pct >= 80 ? "#22c55e" : pct >= 50 ? "#6C4EFF" : "#f59e0b";
+}
+
+function pfStrengthHtml() {
+  const score = pfOverallScore();
+  const sColor = pfSegColor(score);
+  const ringOff = Math.round(226 * (1 - score / 100));
+  return `
+    <div class="pf-strength">
+      <div class="pf-s-ring-wrap">
+        <svg class="pf-s-svg" viewBox="0 0 88 88">
+          <circle class="pf-s-bg" cx="44" cy="44" r="36"/>
+          <circle class="pf-s-arc" cx="44" cy="44" r="36"
+            style="stroke:${sColor};--pf-offset:${ringOff}"/>
+        </svg>
+        <div class="pf-s-inner">
+          <span class="pf-s-num" style="color:${sColor}">${score}</span>
+          <span class="pf-s-lbl">Profil</span>
         </div>
       </div>
-
-      <div class="profile-section" style="display:flex;align-items:center;gap:20px">
-        <div class="score-ring">
-          <svg viewBox="0 0 120 120" style="transform:rotate(-90deg)">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
-            <circle cx="60" cy="60" r="52" fill="none"
-              stroke="${scoreColor(score)}" stroke-width="8"
-              stroke-linecap="round"
-              stroke-dasharray="${fills.toFixed(1)} ${circ.toFixed(1)}"/>
-          </svg>
-          <div class="ring-center">
-            <span class="score-num" style="color:${scoreColor(score)}">${score}</span>
-            <span class="score-lbl">Uyum Puanı</span>
-          </div>
-        </div>
-        <div style="flex:1">
-          <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">Profil Gücü</h3>
-          <p class="body-sm" style="margin-bottom:12px">3 adımda puanını 90'a çıkar</p>
-          <div class="progress-bar"><div class="progress-fill" style="width:${score}%"></div></div>
-          <p class="caption" style="margin-top:4px">${score}/100 · Çok İyi</p>
-        </div>
-      </div>
-
-      <div class="profile-section">
-        <p class="profile-section-title">Profilini Güçlendir</p>
-        ${suggestions.map(s => `
-          <div class="improve-card" onclick="go('settings-profile')" style="cursor:pointer">
-            <div class="improve-icon">${s.icon}</div>
-            <div class="improve-body">
-              <h4>${s.label}</h4>
-              <p>${s.sub}</p>
+      <div class="pf-strength-segs">
+        ${PF_STRENGTH_SEGS.map(s => `
+          <div class="pf-seg-row">
+            <span class="pf-seg-label">${s.label}</span>
+            <div class="pf-seg-bar">
+              <div class="pf-seg-fill" style="width:${s.pct}%;background:${pfSegColor(s.pct)}"></div>
             </div>
-            <span class="improve-pts">${s.pts}</span>
+            <span class="pf-seg-pct" style="color:${pfSegColor(s.pct)}">${s.pct}%</span>
+          </div>`).join("")}
+        <p class="pf-strength-tip">💡 <b>Tercihlerini</b> tamamla — görünürlüğünü %40 artır</p>
+      </div>
+    </div>`;
+}
+
+const PF_SKILL_LEVELS = {
+  "Kahve hazırlama":3,"Kasa kullanımı":3,"Müşteri iletişimi":3,
+  "Ekip çalışması":2,"Ürün bilgisi":2,
+};
+
+function pfSkillDots(level) {
+  return [1,2,3].map(i =>
+    `<span class="pf-sk-dot${i<=level?" on":""}"></span>`
+  ).join("");
+}
+
+function pfSkillsHtml() {
+  return `
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">Yetkinlikler</span>
+        <button class="pf-sec-edit" onclick="go('settings-profile')">+ Düzenle</button>
+      </div>
+      <div class="pf-skill-grid">
+        ${user.skills.map(s => {
+          const lvl = PF_SKILL_LEVELS[s] || 2;
+          return `<div class="pf-skill-card">
+            <div class="pf-sk-name">${s}</div>
+            <div class="pf-sk-dots">${pfSkillDots(lvl)}</div>
+          </div>`;
+        }).join("")}
+      </div>
+      ${user.certs.length ? `<div class="pf-cert-row">
+        ${user.certs.map(c => `<span class="pf-cert-chip">✦ ${c}</span>`).join("")}
+      </div>` : ""}
+    </div>`;
+}
+
+const PF_EXPERIENCE = [
+  { role:"Barista", company:"The Roast Café", period:"Oca 2024 – Haz 2024", desc:"Kahve hazırlama, kasa işlemleri, müşteri iletişimi.", icon:"☕" },
+  { role:"Satış Danışmanı", company:"Zara Kadıköy", period:"Eyl 2023 – Ara 2023", desc:"Ürün tanıtımı, stok takibi, kasa işlemleri.", icon:"🛍" },
+];
+
+function pfTimelineHtml() {
+  return `
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">Deneyim</span>
+        <button class="pf-sec-edit" onclick="go('settings-profile')">+ Ekle</button>
+      </div>
+      <div class="pf-timeline">
+        ${PF_EXPERIENCE.map((e, i) => `
+          <div class="pf-tl-item">
+            <div class="pf-tl-left">
+              <div class="pf-tl-icon">${e.icon}</div>
+              ${i < PF_EXPERIENCE.length - 1 ? '<div class="pf-tl-line"></div>' : ""}
+            </div>
+            <div class="pf-tl-body">
+              <div class="pf-tl-role">${e.role}</div>
+              <div class="pf-tl-co">${e.company}</div>
+              <div class="pf-tl-period">${e.period}</div>
+              <div class="pf-tl-desc">${e.desc}</div>
+            </div>
           </div>`).join("")}
       </div>
+    </div>`;
+}
 
-      <div class="profile-section">
-        <p class="profile-section-title">Yetenekler</p>
-        <div class="skill-grid">
-          ${user.skills.map(s => `<span class="skill-chip">${s}</span>`).join("")}
-          ${user.certs.map(c => `<span class="skill-chip" style="background:var(--success-dim);color:var(--success);border-color:rgba(34,197,94,.25)">${icon("ti-badge")} ${c}</span>`).join("")}
-          <span class="skill-chip" style="border-style:dashed;opacity:.7;cursor:pointer" onclick="go('settings-profile')">+ Düzenle</span>
+const PF_AVAIL_DAYS  = ["Pt","Sa","Ça","Pe","Cu","Ct","Pz"];
+const PF_AVAIL_ON    = [false,false,false,false,false,true,true];
+const PF_AVAIL_TIMES = [
+  { label:"Sabah",  icon:"🌅", on:false },
+  { label:"Öğlen",  icon:"☀️", on:false },
+  { label:"Akşam",  icon:"🌙", on:true  },
+];
+
+function pfAvailHtml() {
+  return `
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">Müsaitlik</span>
+        <button class="pf-sec-edit" onclick="go('settings-prefs')">Düzenle</button>
+      </div>
+      <div class="pf-avail-days">
+        ${PF_AVAIL_DAYS.map((d, i) => `
+          <div class="pf-avail-day${PF_AVAIL_ON[i] ? " on" : ""}">
+            <span>${d}</span>
+          </div>`).join("")}
+      </div>
+      <div class="pf-avail-times">
+        ${PF_AVAIL_TIMES.map(t => `
+          <div class="pf-avail-time${t.on ? " on" : ""}">
+            <span class="pf-avail-t-icon">${t.icon}</span>
+            <span>${t.label}</span>
+          </div>`).join("")}
+      </div>
+      <p class="pf-avail-note">⚡ ${user.availability}</p>
+    </div>`;
+}
+
+const PF_WORK_STYLES = [
+  { id:"flexible", icon:"🔀", label:"Esnek"     },
+  { id:"morning",  icon:"🌅", label:"Sabahçı"   },
+  { id:"evening",  icon:"🌙", label:"Akşamcı"   },
+  { id:"teamwork", icon:"👥", label:"Ekip"      },
+  { id:"solo",     icon:"🎯", label:"Bireysel"  },
+  { id:"physical", icon:"💪", label:"Aktif"     },
+];
+
+const PF_INTERESTS = [
+  { icon:"☕", label:"Yeme-İçme" },
+  { icon:"🛍", label:"Perakende" },
+  { icon:"💆", label:"Hizmet"    },
+  { icon:"📦", label:"Lojistik"  },
+  { icon:"🎨", label:"Yaratıcı" },
+  { icon:"📚", label:"Eğitim"    },
+];
+
+function pfPrefsHtml() {
+  const ws  = state.pfWorkStyles;
+  const wi  = state.pfInterests;
+  return `
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">Çalışma Tarzı</span>
+      </div>
+      <div class="pf-style-grid">
+        ${PF_WORK_STYLES.map(s => `
+          <div class="pf-style-card${ws.includes(s.id) ? " on" : ""}"
+               onclick="togglePfStyle('${s.id}')">
+            <span class="pf-style-icon">${s.icon}</span>
+            <span class="pf-style-label">${s.label}</span>
+          </div>`).join("")}
+      </div>
+    </div>
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">İlgi Alanları</span>
+      </div>
+      <div class="pf-interest-row">
+        ${PF_INTERESTS.map(p => `
+          <div class="pf-interest-chip${wi.includes(p.label) ? " on" : ""}"
+               onclick="togglePfInterest('${p.label}')">
+            ${p.icon} ${p.label}
+          </div>`).join("")}
+      </div>
+    </div>
+    <div class="pf-section">
+      <div class="pf-sec-hdr">
+        <span class="pf-sec-title">Ücret Beklentisi</span>
+      </div>
+      <div class="pf-salary-display">
+        <span class="pf-sal-min">₺500</span>
+        <span class="pf-sal-sep">—</span>
+        <span class="pf-sal-max">₺700</span>
+        <span class="pf-sal-unit">/gün</span>
+      </div>
+      <div class="pf-sal-track">
+        <div class="pf-sal-fill"></div>
+        <div class="pf-sal-thumb" style="left:29%"></div>
+        <div class="pf-sal-thumb" style="left:57%"></div>
+      </div>
+      <div class="pf-sal-labels"><span>₺300</span><span>₺1.000</span></div>
+    </div>`;
+}
+
+function togglePfStyle(id) {
+  const idx = state.pfWorkStyles.indexOf(id);
+  if (idx >= 0) state.pfWorkStyles.splice(idx, 1);
+  else state.pfWorkStyles.push(id);
+  document.querySelectorAll(".pf-style-card").forEach(el => {
+    const elId = el.getAttribute("onclick").match(/'([^']+)'/)?.[1];
+    if (elId) el.classList.toggle("on", state.pfWorkStyles.includes(elId));
+  });
+}
+
+function togglePfInterest(label) {
+  const idx = state.pfInterests.indexOf(label);
+  if (idx >= 0) state.pfInterests.splice(idx, 1);
+  else state.pfInterests.push(label);
+  document.querySelectorAll(".pf-interest-chip").forEach(el => {
+    const elLabel = el.getAttribute("onclick").match(/'([^']+)'/)?.[1];
+    if (elLabel) el.classList.toggle("on", state.pfInterests.includes(elLabel));
+  });
+}
+
+function renderProfile() {
+  const score  = pfOverallScore();
+  const sColor = pfSegColor(score);
+  const ringOff = Math.round(226 * (1 - score / 100));
+  return screen(`
+    <div class="pf-cover">
+      <div class="pf-cover-top">
+        <div class="pf-cover-title">Profilim</div>
+        <button class="pf-settings-btn" onclick="go('settings')">⚙</button>
+      </div>
+      <div class="pf-identity">
+        <div class="pf-avatar-wrap">
+          <svg class="pf-av-svg" viewBox="0 0 88 88">
+            <circle class="pf-av-bg" cx="44" cy="44" r="36"/>
+            <circle class="pf-av-arc" cx="44" cy="44" r="36"
+              style="stroke:${sColor};--pf-offset:${ringOff}"/>
+          </svg>
+          <div class="pf-avatar">${user.initials}</div>
+        </div>
+        <div class="pf-identity-info">
+          <div class="pf-name-row">
+            <h1 class="pf-name">${user.name}</h1>
+            <span class="pf-verified">✦ Doğrulandı</span>
+          </div>
+          <p class="pf-role">${user.role}</p>
+          <p class="pf-loc">📍 ${user.location}</p>
+          <div class="pf-tag-chips">
+            <span class="pf-tagchip">⚡ ${user.experience}</span>
+            <span class="pf-tagchip">★ ${user.rating}</span>
+            <span class="pf-tagchip">📩 ${user.responseRate}</span>
+          </div>
         </div>
       </div>
-
-      <div class="profile-section">
-        <p class="profile-section-title">Tercihler</p>
-        <div class="job-list">
-          <div class="job-row" style="border-radius:var(--r-sm)">
-            <span style="font-size:16px">⚡</span>
-            <div class="job-row-body"><h3>Müsaitlik</h3><p class="co">${user.availability}</p></div>
-          </div>
-          <div class="job-row" style="border-radius:var(--r-sm)">
-            <span style="font-size:16px">₺</span>
-            <div class="job-row-body"><h3>Beklenti</h3><p class="co">Günlük ₺500–700</p></div>
-          </div>
-        </div>
+      <div class="pf-score-pill" style="color:${sColor};border-color:${sColor}">
+        <span class="pf-score-n">${score}</span>
+        <span class="pf-score-t">Profil Puanı</span>
       </div>
-
-      <div style="padding:16px 18px 32px">
-        <button class="btn btn-ghost btn-full" onclick="go('settings')">
-          ${icon("ti-settings")} Ayarlar
-        </button>
+    </div>
+    <div class="pf-completion-bar">
+      ${PF_STRENGTH_SEGS.map(s => `
+        <div class="pf-cb-seg"
+          style="background:${pfSegColor(s.pct)};opacity:${(s.pct/100).toFixed(2)}"
+          title="${s.label} · ${s.pct}%"></div>`).join("")}
+    </div>
+    <div class="pf-body">
+      ${pfStrengthHtml()}
+      ${pfSkillsHtml()}
+      ${pfTimelineHtml()}
+      ${pfAvailHtml()}
+      ${pfPrefsHtml()}
+      <div class="pf-section pf-actions">
+        <button class="pf-action-btn" onclick="go('settings')">⚙ Ayarlar</button>
+        <button class="pf-action-btn pf-action-share">↗ Profili Paylaş</button>
       </div>
-    </div>`, bottomNav("profile"));
+    </div>
+  `, bottomNav("profile"));
 }
 
 /* SETTINGS */
@@ -3965,7 +4149,7 @@ Object.assign(window, {
   setDetailMode, commitDetailInterest,
   sendQuickReply, toggleChatAttach, shareLocation, shareDocument, shareProfile,
   proposeInterview, acceptInterview, declineInterview,
-  openInterview, refreshLocation,
+  openInterview, refreshLocation, togglePfStyle, togglePfInterest,
   formatAuthPhone, submitAuthPhone, onRegOtpInput, onRegOtpKey,
   onRegNameInput, updateRegAvatar, cycleAvatarColor,
   toggleRegSkill, goToRegisterLocation, selectRegCity, selectRegDistrict,
