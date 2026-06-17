@@ -178,6 +178,45 @@ const matchItems = [
 const matchTabLabels = ["Yeni Eşleşme","Aktif Konuşma","Görüşme","İşe Alındı"];
 const matchTabCounts = matchItems.map(t => t.length);
 
+/* ─── MATCH CENTER DATA ──────────────────────────────────────────── */
+const MC_MATCHES = [
+  {id:"m1",initials:"CL",name:"Cafe Lumiere",   role:"Barista",              jobId:1,
+   stage:"new",       time:"Şimdi",  preview:"Tebrikler! Profilin ilgimizi çekti ✦",
+   unread:2,score:92,dist:1.2,hue:"108,78,255"},
+  {id:"m2",initials:"MP",name:"ModaPlus",        role:"Satış Temsilcisi",     jobId:4,
+   stage:"new",       time:"2 dk",   preview:"Merhaba, seninle görüşmek isteriz.",
+   unread:1,score:80,dist:1.8,hue:"34,197,94"},
+  {id:"m3",initials:"NC",name:"NetCall",          role:"Çağrı Mrk. Tmslcsi",  jobId:null,
+   stage:"new",       time:"15 dk",  preview:"Profilinizi inceledik, ilgileniyoruz.",
+   unread:0,score:75,dist:2.3,hue:"245,158,11"},
+  {id:"m4",initials:"BM",name:"Beyaz Masa",      role:"Garson",               jobId:2,
+   stage:"chatting",  time:"Dün",    preview:"Yarın 14:00 müsait misiniz? Kısa bir görüşme.",
+   unread:1,score:85,dist:0.8,hue:"34,197,94"},
+  {id:"m5",initials:"SG",name:"SafeGuard",       role:"Güvenlik Görevlisi",   jobId:5,
+   stage:"chatting",  time:"2 gün",  preview:"Belgeleri gönderdiyseniz haberdar edin.",
+   unread:0,score:75,dist:3.4,hue:"239,68,68"},
+  {id:"m6",initials:"TM",name:"Teknomarket",     role:"Kasa Görevlisi",       jobId:4,
+   stage:"interview", time:"17 Haz", preview:"Video görüşmen 17 Haz 14:00'da başlıyor.",
+   unread:0,score:80,dist:1.8,hue:"239,68,68",
+   interview:{date:"17 Haziran",time:"14:00",type:"Video Görüşme"}},
+  {id:"m7",initials:"LD",name:"Lezzet Durağı",  role:"Aşçı Yardımcısı",     jobId:null,
+   stage:"hired",     time:"10 Haz", preview:"İşe başlama tarihin 20 Haziran!",
+   unread:0,score:88,dist:1.1,hue:"34,197,94"},
+];
+
+const MC_SAVED = [
+  {jobId:3,initials:"HG",name:"HızlıGit",   role:"Kurye",          savedAt:"3 gün",score:78,dist:2.1,type:"Serbest",     hue:"245,158,11"},
+  {jobId:4,initials:"TM",name:"Teknomarket", role:"Kasa Görevlisi", savedAt:"1 gün",score:80,dist:1.8,type:"Yarı zamanlı",hue:"239,68,68"},
+];
+
+const MC_RECOS = [
+  "Hızlı yanıt verenler 3× daha fazla görüşme alıyor — şimdi mesaj gönder!",
+  "Bu şirketler genellikle 24 saat içinde yanıt veriyor, devam et.",
+  "Görüşme öncesi şirket profilini bir kez daha incelemeyi unutma.",
+  "🎉 Harika gidiyorsun! Sürecin doğru ilerliyor.",
+  "Kaydettiğin ilanlar dolmadan harekete geç.",
+];
+
 /* ─── ROUTING ────────────────────────────────────────────────────── */
 const navItems = [
   ["home",     "ti-home",           "Ana Sayfa"],
@@ -1520,41 +1559,238 @@ function renderNotifications() {
 }
 
 /* MATCHES */
+/* ── MATCH CENTER HELPERS ──────────────────────────────────────── */
+function mcCardNew(m) {
+  return `
+  <div class="mc-card mc-card-new" onclick="go('chat')">
+    <div class="mc-card-head">
+      <div class="mc-av" style="background:rgba(${m.hue},.18);color:rgba(${m.hue},1)">
+        ${m.initials}<div class="mc-dot mc-dot-new"></div>
+      </div>
+      <div class="mc-info">
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-role">${m.role}</div>
+      </div>
+      <div class="mc-meta">
+        <span class="mc-time">${m.time}</span>
+        ${m.unread ? `<span class="mc-unread">${m.unread}</span>` : ""}
+      </div>
+    </div>
+    <div class="mc-preview">"${m.preview}"</div>
+    <div class="mc-card-foot">
+      <div class="mc-kpis">
+        <span class="mc-kpi-score" style="color:${jdScoreColor(m.score)}">${m.score}%</span>
+        <span class="mc-kpi-dot">·</span>
+        <span class="mc-kpi-dist">${m.dist} km</span>
+      </div>
+      <span class="mc-sb mc-sb-new">✦ Yeni Eşleşme</span>
+    </div>
+    <div class="mc-actions">
+      <button class="mc-act mc-act-ghost"
+        onclick="event.stopPropagation();openJob(${m.jobId||1},'matches')">👤 Profil</button>
+      <button class="mc-act mc-act-pri"
+        onclick="event.stopPropagation();go('chat')">💬 Mesaj Gönder</button>
+    </div>
+  </div>`;
+}
+
+function mcCardActive(m) {
+  return `
+  <div class="mc-card" onclick="go('chat')">
+    <div class="mc-card-head">
+      <div class="mc-av" style="background:rgba(${m.hue},.18);color:rgba(${m.hue},1)">
+        ${m.initials}<div class="mc-dot mc-dot-active"></div>
+      </div>
+      <div class="mc-info">
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-role">${m.role}</div>
+      </div>
+      <div class="mc-meta">
+        <span class="mc-time">${m.time}</span>
+        ${m.unread ? `<span class="mc-unread">${m.unread}</span>` : ""}
+      </div>
+    </div>
+    <div class="mc-preview">${m.preview}</div>
+    <div class="mc-card-foot">
+      <span class="mc-sb mc-sb-active">● Konuşma Devam Ediyor</span>
+    </div>
+  </div>`;
+}
+
+function mcCardInterview(m) {
+  const iv = m.interview || {};
+  return `
+  <div class="mc-card mc-card-interview" onclick="go('interview')">
+    <div class="mc-card-head">
+      <div class="mc-av" style="background:rgba(${m.hue},.18);color:rgba(${m.hue},1)">
+        ${m.initials}<div class="mc-dot mc-dot-interview"></div>
+      </div>
+      <div class="mc-info">
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-role">${m.role}</div>
+      </div>
+      <span class="mc-sb mc-sb-interview">📅 Görüşme Var</span>
+    </div>
+    <div class="mc-iv-block">
+      <div class="mc-iv-row">
+        <span class="mc-iv-ic">📅</span>
+        <span class="mc-iv-val">${iv.date||""} · ${iv.time||""}</span>
+      </div>
+      <div class="mc-iv-row">
+        <span class="mc-iv-ic">🎥</span>
+        <span class="mc-iv-val">${iv.type||"Görüşme"}</span>
+      </div>
+    </div>
+    <div class="mc-actions">
+      <button class="mc-act mc-act-ghost" onclick="event.stopPropagation()">🗺 Konum</button>
+      <button class="mc-act mc-act-amber"
+        onclick="event.stopPropagation();go('interview')">✓ Görüşmeye Git</button>
+    </div>
+  </div>`;
+}
+
+function mcCardHired(m) {
+  return `
+  <div class="mc-card mc-card-hired" onclick="go('chat')">
+    <div class="mc-hired-banner">🏆 Tebrikler! Bu macera başlıyor.</div>
+    <div class="mc-card-head">
+      <div class="mc-av" style="background:rgba(${m.hue},.18);color:rgba(${m.hue},1)">
+        ${m.initials}<div class="mc-dot mc-dot-hired"></div>
+      </div>
+      <div class="mc-info">
+        <div class="mc-name">${m.name}</div>
+        <div class="mc-role">${m.role}</div>
+      </div>
+      <span class="mc-time">${m.time}</span>
+    </div>
+    <p class="mc-hired-note">${m.preview}</p>
+  </div>`;
+}
+
+function mcSavedContent() {
+  const likedJobs = jobs.filter(j => state.swipe.likedIds.includes(j.id));
+  const list = likedJobs.length
+    ? likedJobs.map(j => ({jobId:j.id,initials:j.initials,name:j.company,role:j.title,
+        savedAt:"Bugün",score:j.matchScore,dist:j.distance,type:j.type,hue:j.hue}))
+    : MC_SAVED;
+  if (!list.length) return mcEmptyState(4);
+  return list.map(s => `
+    <div class="mc-saved-card" onclick="openJob(${s.jobId||1},'matches')">
+      <div class="mc-av" style="background:rgba(${s.hue},.18);color:rgba(${s.hue},1)">${s.initials}</div>
+      <div class="mc-s-info">
+        <div class="mc-s-name">${s.name}</div>
+        <div class="mc-s-role">${s.role}</div>
+        <div class="mc-s-meta">${s.score}% · ${s.dist} km · ${s.type}</div>
+      </div>
+      <div class="mc-s-right">
+        <span class="mc-s-time">${s.savedAt} önce</span>
+        <button class="mc-s-view"
+          onclick="event.stopPropagation();openJob(${s.jobId||1},'matches')">Görüntüle →</button>
+      </div>
+    </div>`).join("") + `
+    <div class="mc-reco-card">
+      <span class="mc-reco-ic">⚡</span>
+      <div>
+        <div class="mc-reco-title">Dolmadan Karar Ver</div>
+        <div class="mc-reco-sub">Kaydettiklerini hızlıca incele ve ilgi göster.</div>
+      </div>
+    </div>`;
+}
+
+function mcEmptyState(tab) {
+  const msgs = [
+    {icon:"✦",title:"Henüz eşleşme yok",      sub:"Keşfet ekranından ilgilendiğin işlere beğeni gönder.",route:"discover",cta:"Keşfete Git"},
+    {icon:"💬",title:"Konuşma başlamadı",       sub:"Yeni eşleşmelerine mesaj gönder, konuşma başlat.", route:"matches", cta:"Eşleşmelere Dön"},
+    {icon:"📅",title:"Görüşme daveti yok",     sub:"Aktif konuşmalarını ilerletince davetler gelecek.", route:"matches", cta:"Mesajlarıma Git"},
+    {icon:"🏆",title:"Henüz işe alınmadın",    sub:"Her görüşme seni bir adım daha yaklaştırıyor.",     route:"matches", cta:"Görüşmelerime Git"},
+    {icon:"☆", title:"Kaydedilen ilan yok",     sub:"Kart kaydırırken ↑ yukarı kaydırarak ilanları kaydet.",route:"discover",cta:"Keşfete Git"},
+  ];
+  const m = msgs[tab] || msgs[0];
+  return `<div class="mc-empty">
+    <div class="mc-empty-icon">${m.icon}</div>
+    <h3 class="mc-empty-title">${m.title}</h3>
+    <p class="mc-empty-sub">${m.sub}</p>
+    <button class="btn btn-primary" onclick="go('${m.route}')" style="margin-top:16px">${m.cta}</button>
+  </div>`;
+}
+
+function mcBodyContent(tab) {
+  if (tab === 4) return mcSavedContent();
+  const stageMap = [["new"],["chatting"],["interview"],["hired","offer"]];
+  const stages   = stageMap[tab] || [];
+  const items    = MC_MATCHES.filter(m => stages.includes(m.stage));
+  if (!items.length) return mcEmptyState(tab);
+  const cards = items.map(m => {
+    if (stages[0] === "new")       return mcCardNew(m);
+    if (stages[0] === "chatting")  return mcCardActive(m);
+    if (stages[0] === "interview") return mcCardInterview(m);
+    if (stages[0] === "hired")     return mcCardHired(m);
+    return "";
+  }).join("");
+  return cards + `
+    <div class="mc-reco-card">
+      <span class="mc-reco-ic">💡</span>
+      <div>
+        <div class="mc-reco-title">Sürecini Hızlandır</div>
+        <div class="mc-reco-sub">${MC_RECOS[tab] || MC_RECOS[0]}</div>
+      </div>
+    </div>`;
+}
+
+function mcPipelineHtml() {
+  const cnt = {
+    new:       MC_MATCHES.filter(m => m.stage === "new").length,
+    chatting:  MC_MATCHES.filter(m => m.stage === "chatting").length,
+    interview: MC_MATCHES.filter(m => m.stage === "interview").length,
+    hired:     MC_MATCHES.filter(m => m.stage === "hired").length,
+  };
+  const nodes = [
+    {label:"Yeni",    n:cnt.new,       c:"#22c55e"},
+    {label:"Aktif",   n:cnt.chatting,  c:"#6C4EFF"},
+    {label:"Görüşme", n:cnt.interview, c:"#f59e0b"},
+    {label:"Alındı",  n:cnt.hired,     c:"#22c55e"},
+  ];
+  return `<div class="mc-pipe">
+    ${nodes.map((nd, i) => `
+      ${i > 0 ? `<div class="mc-pipe-line${nd.n > 0 ? " mc-pl-on" : ""}"></div>` : ""}
+      <div class="mc-pipe-node">
+        <div class="mc-pn-circle${nd.n > 0 ? " mc-pn-on" : ""}"
+          style="${nd.n > 0 ? `background:${nd.c}` : ""}">
+          ${nd.n > 0 ? nd.n : "·"}
+        </div>
+        <div class="mc-pn-label">${nd.label}</div>
+      </div>`).join("")}
+  </div>`;
+}
+
 function renderMatches() {
-  const tab = state.matchesTab;
-  const items = matchItems[tab] || [];
+  const tab   = state.matchesTab;
+  const newCt = MC_MATCHES.filter(m => m.stage === "new").length;
+  const actCt = MC_MATCHES.filter(m => m.stage === "chatting").length;
+  const ivCt  = MC_MATCHES.filter(m => m.stage === "interview").length;
+  const tabs  = [
+    {label:"✦ Yeni",    count:newCt},
+    {label:"💬 Aktif",  count:actCt},
+    {label:"📅 Görüşme",count:ivCt},
+    {label:"🏆 Alındı", count:0},
+    {label:"☆ Kayıtlı", count:0},
+  ];
   return screen(`
-    ${topbar("Eşleşmeler")}
-    <div class="tab-bar">
-      ${matchTabLabels.map((l,i) => `
-        <button class="tab-btn${tab===i?" active":""}" onclick="setMatchesTab(${i})">
-          ${l}
-          <span class="tab-count">${matchTabCounts[i]}</span>
+    <header class="mc-topbar">
+      <div>
+        <h1 class="mc-topbar-title">Fırsat Merkezi</h1>
+        <div class="mc-topbar-sub">${MC_MATCHES.length} aktif süreç</div>
+      </div>
+    </header>
+    ${mcPipelineHtml()}
+    <div class="mc-tabs">
+      ${tabs.map((t, i) => `
+        <button class="mc-tab${tab === i ? " mc-tab-on" : ""}" onclick="setMCTab(${i})">
+          ${t.label}${t.count > 0 ? `<span class="mc-tab-ct">${t.count}</span>` : ""}
         </button>`).join("")}
     </div>
-    <div class="screen-body">
-      ${items.length ? items.map(m => `
-        <div class="match-card" onclick="${tab === 2 ? `openInterview('${m.name}','${m.initials}','${m.role}')` : "go('chat')"}">
-          <div class="match-avatar">
-            ${m.initials}
-            <div class="match-status-dot ${m.dot}"></div>
-          </div>
-          <div class="match-body">
-            <h3>${m.name}</h3>
-            <p class="role">${m.role}</p>
-            <p class="preview">${m.preview}</p>
-          </div>
-          <div class="match-right">
-            <span class="match-time">${m.time}</span>
-            ${m.unread > 0 ? `<span class="match-unread">${m.unread}</span>` : ""}
-            ${tab === 2 ? `<span style="font-size:10px;color:var(--primary)">→ Görüşme</span>` : ""}
-          </div>
-        </div>`).join("") :
-        `<div class="empty-state">
-          <div class="empty-icon">✦</div>
-          <h2 class="empty-title">Henüz yok</h2>
-          <p class="empty-sub">Bu kategoride henüz bir aktiviten yok.</p>
-        </div>`}
+    <div class="mc-body" id="mc-body">
+      ${mcBodyContent(tab)}
     </div>`, bottomNav("matches"));
 }
 
@@ -3218,10 +3454,14 @@ function toggleSheet() { cycleSheetState(); }
 function filterMapJobs(q) { filterMapSearch(q); }
 function filterMapType(btn, type) { setMapTypeFilter(btn, type); }
 
-function setMatchesTab(i) {
-  state.matchesTab = i;
-  render();
+function setMCTab(tab) {
+  state.matchesTab = tab;
+  const body = document.getElementById("mc-body");
+  if (body) body.innerHTML = mcBodyContent(tab);
+  document.querySelectorAll(".mc-tab").forEach((b, i) =>
+    b.classList.toggle("mc-tab-on", i === tab));
 }
+function setMatchesTab(i) { setMCTab(i); }
 
 function setDirMode(m) {
   state.dirMode = m;
@@ -3528,7 +3768,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 /* expose to inline onclick */
 Object.assign(window, {
   go, render, openJob, swipeCard, undoSwipe, resetDeck,
-  selectPin, toggleSheet, setMatchesTab, setDirMode,
+  selectPin, toggleSheet, setMatchesTab, setMCTab, setDirMode,
   selectResult, setRating, sendMessage,
   selectMapPin, deselectMapPin, setSheetState, cycleSheetState,
   setMapRouteMode, setMapTypeFilter, filterMapSearch, applyMapFilters,
