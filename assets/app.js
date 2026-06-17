@@ -6,6 +6,15 @@
 const state = {
   selectedResult: "",
   rating: 0,
+  onboarding: {
+    userType: null,
+    categories: [],
+    distance: 5,
+    workTypes: ["Yarı zamanlı"],
+    minSalary: 550,
+    name: "",
+    phone: "",
+  },
   messages: [
     { from:"business", text:"Merhaba Selin, profilini inceledik. Hafta sonu vardiyası için görüşmek ister misin?", time:"14:08" },
     { from:"me",       text:"Merhaba, uygunum. Vardiya saatleri nasıl olacak?", time:"14:10" },
@@ -1320,8 +1329,469 @@ function renderResult() {
     </div>`, bottomNav(""));
 }
 
+/* ─── ONBOARDING ────────────────────────────────────────────────── */
+
+function obProgress(step, total = 5) {
+  return `<div class="ob-progress">${Array.from({length: total}, (_,i) =>
+    `<div class="ob-dot${i < step ? " done" : i === step ? " active" : ""}"></div>`
+  ).join("")}</div>`;
+}
+
+function renderOnboardingSplash() {
+  setTimeout(() => {
+    if (currentRoute() === "onboarding-splash") go("onboarding-welcome");
+  }, 2200);
+  return `<div class="ob-screen ob-splash anim-fade-in">
+    <div class="ob-splash-content">
+      <div class="ob-splash-logo-wrap">
+        <div class="ob-splash-radar ob-splash-radar-1"></div>
+        <div class="ob-splash-radar ob-splash-radar-2"></div>
+        <div class="ob-splash-mark">✦</div>
+      </div>
+      <h1 class="ob-splash-title">Matchwork</h1>
+    </div>
+  </div>`;
+}
+
+function _cityPreviewCards() {
+  return [
+    {title:"Cafe Lumiere", score:92, dist:"1.2 km", delay:"0s"},
+    {title:"ModaPlus", score:88, dist:"0.8 km", delay:".3s"},
+    {title:"NetCall", score:82, dist:"2.1 km", delay:".6s"},
+  ].map(c => `
+    <div class="city-preview-card" style="animation-delay:${c.delay}">
+      <span class="city-card-score ${c.score>=85?"score-green":"score-blue"}">${c.score}%</span>
+      <span class="city-card-title">${c.title}</span>
+      <span class="city-card-dist">📍 ${c.dist}</span>
+    </div>`).join("");
+}
+
+function renderOnboardingWelcome() {
+  return `<div class="ob-screen ob-welcome">
+    <div class="ob-city-anim">
+      <div class="city-grid-lines">
+        <div class="cgl cgl-h" style="top:30%"></div>
+        <div class="cgl cgl-h" style="top:58%"></div>
+        <div class="cgl cgl-h" style="top:80%"></div>
+        <div class="cgl cgl-v" style="left:25%"></div>
+        <div class="cgl cgl-v" style="left:62%"></div>
+        <div class="cgl cgl-v" style="left:85%"></div>
+        <div class="city-user-pin"></div>
+      </div>
+      <div class="city-cards-preview">${_cityPreviewCards()}</div>
+    </div>
+    <div class="ob-welcome-copy">
+      <h1 class="ob-headline">Çevrende iş var.<br>Henüz haberdar değilsin.</h1>
+      <p class="ob-subline">Matchwork yakınındaki fırsatları bulur,<br>seni doğru işe saniyeler içinde eşleştirir.</p>
+      <div class="ob-actions">
+        <button class="btn btn-primary btn-full ob-btn" onclick="go('onboarding-location')">Başlayalım →</button>
+        <button class="btn btn-ghost btn-full ob-btn-sec" onclick="go('auth')">Zaten hesabım var</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOnboardingLocation() {
+  const pins = [
+    {label:"1.2 km",x:"70%",y:"25%",d:".1s"},
+    {label:"0.8 km",x:"18%",y:"33%",d:".4s"},
+    {label:"2.1 km",x:"74%",y:"70%",d:".7s"},
+    {label:"1.7 km",x:"14%",y:"68%",d:"1s"},
+  ];
+  return `<div class="ob-screen">
+    ${obProgress(0)}
+    <div class="ob-hero ob-loc-hero">
+      <div class="ob-loc-anim">
+        <div class="ob-loc-ring ob-loc-ring-1"></div>
+        <div class="ob-loc-ring ob-loc-ring-2"></div>
+        <div class="ob-loc-ring ob-loc-ring-3"></div>
+        <div class="ob-loc-center">📍</div>
+        ${pins.map(p=>`<div class="ob-loc-pin" style="left:${p.x};top:${p.y};animation-delay:${p.d}">${p.label}</div>`).join("")}
+      </div>
+    </div>
+    <div class="ob-copy">
+      <h2 class="ob-h2">Sana yakın fırsatlar için<br>konumunu paylaş</h2>
+      <p class="ob-body">🔒 Yalnızca uygulama açıkken kullanılır.<br>Konumun hiçbir işveren ile paylaşılmaz.</p>
+      <div class="ob-actions">
+        <button class="btn btn-primary btn-full ob-btn" onclick="requestLocationPermission()">Konumuma İzin Ver</button>
+        <button class="btn btn-ghost btn-full ob-btn-sec" onclick="go('onboarding-type')">Şimdi değil</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOnboardingType() {
+  const t = state.onboarding.userType;
+  return `<div class="ob-screen">
+    ${obProgress(1)}
+    <div class="ob-copy ob-type-copy">
+      <h2 class="ob-h2">Sen kimsin?</h2>
+      <p class="ob-body">Deneyimini buna göre kişiselleştireceğiz.</p>
+    </div>
+    <div class="ob-type-cards">
+      <div class="ob-type-card${t==="seeker"?" selected":""}" onclick="selectUserType('seeker')">
+        <div class="ob-type-icon">👤</div>
+        <h3>Fırsat Arıyorum</h3>
+        <p>Yakınımdaki işleri keşfet, hızla eşleş, başla.</p>
+        ${t==="seeker"?'<div class="ob-type-check">✓</div>':""}
+      </div>
+      <div class="ob-type-card${t==="business"?" selected":""}" onclick="selectUserType('business')">
+        <div class="ob-type-icon">🏢</div>
+        <h3>Eleman Arıyorum</h3>
+        <p>Doğru kişiyi bul, davet et, bugün çalıştır.</p>
+        ${t==="business"?'<div class="ob-type-check">✓</div>':""}
+      </div>
+    </div>
+  </div>`;
+}
+
+const OB_CATEGORIES = [
+  {icon:"☕",label:"Kafe & Restoran"},
+  {icon:"🛍️",label:"Perakende & Satış"},
+  {icon:"🍳",label:"Mutfak & Aşçılık"},
+  {icon:"📦",label:"Lojistik & Depo"},
+  {icon:"💆",label:"Güzellik & Spa"},
+  {icon:"🎨",label:"Yaratıcı & Tasarım"},
+  {icon:"🔧",label:"Teknik & Tamir"},
+  {icon:"👶",label:"Bakım & Eğitim"},
+  {icon:"🏋️",label:"Sağlık & Spor"},
+  {icon:"🧹",label:"Temizlik & Bakım"},
+  {icon:"🎪",label:"Etkinlik & Org."},
+  {icon:"➕",label:"Diğer"},
+];
+
+function renderOnboardingCategories() {
+  const sel = state.onboarding.categories;
+  return `<div class="ob-screen">
+    ${obProgress(2)}
+    <div class="ob-copy" style="padding-bottom:0">
+      <h2 class="ob-h2">Ne tür işler seni<br>heyecanlandırır?</h2>
+      <p class="ob-body" style="margin-bottom:0">En az 1 kategori seç. İstediğin kadar ekleyebilirsin.</p>
+    </div>
+    <div class="ob-cat-grid">
+      ${OB_CATEGORIES.map(c => `
+        <div class="ob-cat-item${sel.includes(c.label)?" selected":""}" onclick="toggleCategory('${c.label}')">
+          <span class="ob-cat-icon">${c.icon}</span>
+          <span class="ob-cat-label">${c.label}</span>
+          ${sel.includes(c.label)?'<div class="ob-cat-check">✓</div>':""}
+        </div>`).join("")}
+    </div>
+    <div class="ob-sticky-bottom">
+      <div class="ob-count">${sel.length > 0 ? `${sel.length} kategori seçildi` : "Kategori seç"}</div>
+      <button class="btn btn-primary btn-full ob-btn${sel.length===0?" disabled":""}"
+        ${sel.length===0?"disabled":""} onclick="go('onboarding-prefs')">Devam Et →</button>
+    </div>
+  </div>`;
+}
+
+function renderOnboardingPrefs() {
+  const ob = state.onboarding;
+  const workOpts = ["Tam zamanlı", "Yarı zamanlı", "Günlük / Gig"];
+  return `<div class="ob-screen">
+    ${obProgress(3)}
+    <div class="ob-copy" style="padding-bottom:0">
+      <h2 class="ob-h2">Nasıl çalışmak istersin?</h2>
+      <p class="ob-body" style="margin-bottom:0">Bunları istediğin zaman değiştirebilirsin.</p>
+    </div>
+    <div class="ob-prefs-body">
+      <div class="ob-pref-section">
+        <p class="ob-pref-label">Ne kadar uzağa gidebilirsin?</p>
+        <div class="ob-slider-wrap">
+          <input type="range" class="ob-slider" id="ob-dist-slider" min="1" max="15" value="${ob.distance}"
+            oninput="updateObDistance(this.value)">
+          <div class="ob-slider-val" id="ob-dist-val">${ob.distance} km</div>
+        </div>
+        <div class="ob-quick-chips">
+          ${[1,3,5,10].map(v=>`<span class="ob-chip${ob.distance==v?" active":""}" onclick="updateObDistance(${v})">${v} km</span>`).join("")}
+          <span class="ob-chip${ob.distance>10?" active":""}">10+ km</span>
+        </div>
+      </div>
+      <div class="ob-pref-section">
+        <p class="ob-pref-label">Çalışma şekli</p>
+        <div class="ob-quick-chips" id="ob-work-chips">
+          ${workOpts.map(w=>`<span class="ob-chip${ob.workTypes.includes(w)?" active":""}" onclick="toggleObWorkType('${w}')">${w}</span>`).join("")}
+        </div>
+      </div>
+      <div class="ob-pref-section">
+        <p class="ob-pref-label">Günlük minimum kaç ₺ bekliyorsun?</p>
+        <div class="ob-slider-wrap">
+          <input type="range" class="ob-slider" id="ob-sal-slider" min="300" max="2000" step="50" value="${ob.minSalary}"
+            oninput="updateObSalary(this.value)">
+          <div class="ob-slider-val" id="ob-sal-val">₺${ob.minSalary} ve üzeri</div>
+        </div>
+      </div>
+    </div>
+    <div class="ob-sticky-bottom" style="border-top:none">
+      <button class="btn btn-primary btn-full ob-btn" onclick="go('onboarding-account')">Fırsatları Göster →</button>
+    </div>
+  </div>`;
+}
+
+function renderOnboardingAccount() {
+  return `<div class="ob-screen">
+    ${obProgress(4)}
+    <div class="ob-copy">
+      <h2 class="ob-h2">Neredeyse hazırsın.</h2>
+      <p class="ob-body">Hesabını oluştur, fırsatlara eriş.</p>
+    </div>
+    <div class="ob-form">
+      <div class="input-group">
+        <label class="input-label">Ad Soyad</label>
+        <input class="input-field ob-input" id="ob-name" type="text" placeholder="Ad Soyad"
+          value="${state.onboarding.name}"
+          oninput="state.onboarding.name=this.value;updateObAccountBtn()">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Telefon</label>
+        <div class="ob-phone-wrap">
+          <span class="ob-phone-prefix">🇹🇷 +90</span>
+          <input class="input-field ob-phone-input" id="ob-phone" type="tel"
+            placeholder="5XX XXX XX XX" maxlength="14"
+            value="${state.onboarding.phone}"
+            oninput="state.onboarding.phone=this.value;updateObAccountBtn()">
+        </div>
+      </div>
+      <div class="input-group">
+        <label class="input-label" style="color:var(--text-3)">E-posta (opsiyonel)</label>
+        <input class="input-field ob-input" type="email" placeholder="E-posta" style="opacity:.6">
+      </div>
+      <p class="ob-legal">Devam ederek <u>Kullanım Koşulları</u> ve <u>Gizlilik Politikası</u>'nı kabul ediyorsun.</p>
+    </div>
+    <div class="ob-sticky-bottom" style="border-top:none">
+      <button class="btn btn-primary btn-full ob-btn" id="ob-account-btn"
+        onclick="go('onboarding-otp')" disabled>Doğrulama Kodu Gönder</button>
+    </div>
+  </div>`;
+}
+
+function renderOnboardingOTP() {
+  const phone = state.onboarding.phone || "5XX XXX XX XX";
+  return `<div class="ob-screen">
+    ${obProgress(4)}
+    <div class="ob-copy" style="align-items:center;text-align:center">
+      <div class="ob-otp-icon">📱</div>
+      <h2 class="ob-h2" style="text-align:center">Kodu gir</h2>
+      <p class="ob-body" style="text-align:center">+90 ${phone} numarana<br>4 haneli kod gönderdik</p>
+    </div>
+    <div class="ob-otp-inputs">
+      <input class="ob-otp-box" id="otp0" type="tel" maxlength="1"
+        oninput="onOtpInput(this,0)" onkeydown="onOtpKey(event,0)">
+      <input class="ob-otp-box" id="otp1" type="tel" maxlength="1"
+        oninput="onOtpInput(this,1)" onkeydown="onOtpKey(event,1)">
+      <input class="ob-otp-box" id="otp2" type="tel" maxlength="1"
+        oninput="onOtpInput(this,2)" onkeydown="onOtpKey(event,2)">
+      <input class="ob-otp-box" id="otp3" type="tel" maxlength="1"
+        oninput="onOtpInput(this,3)" onkeydown="onOtpKey(event,3)">
+    </div>
+    <div id="ob-otp-feedback" class="ob-otp-feedback"></div>
+    <div class="ob-sticky-bottom" style="border-top:none;padding-top:8px">
+      <button class="ob-resend-btn" id="ob-resend" disabled>
+        Kodu almadım → <span id="ob-resend-timer">60s</span> sonra tekrar gönder
+      </button>
+    </div>
+  </div>`;
+}
+
+function _generateConfetti() {
+  const colors = ["var(--primary)","var(--success)","var(--warning)","#ff6b9d","#4ecdc4"];
+  return Array.from({length:28}, () => {
+    const x = (Math.random()*100).toFixed(1);
+    const delay = (Math.random()*1.4).toFixed(2);
+    const dur = (1.4 + Math.random()*.8).toFixed(2);
+    const size = 4 + Math.floor(Math.random()*6);
+    const color = colors[Math.floor(Math.random()*colors.length)];
+    return `<div class="confetti-piece" style="left:${x}%;animation-delay:${delay}s;animation-duration:${dur}s;width:${size}px;height:${size}px;background:${color}"></div>`;
+  }).join("");
+}
+
+function renderOnboardingSuccess() {
+  setTimeout(() => {
+    const el = document.getElementById("ob-count-num");
+    if (!el) return;
+    let n = 0;
+    const target = jobs.length;
+    const t = setInterval(() => {
+      n = Math.min(n+1, target);
+      el.textContent = n;
+      if (n >= target) clearInterval(t);
+    }, 55);
+  }, 350);
+
+  return `<div class="ob-screen ob-success anim-fade-in">
+    <div class="ob-confetti">${_generateConfetti()}</div>
+    <div class="ob-success-hero">
+      <div class="ob-count-display">
+        <span class="ob-count-num" id="ob-count-num">0</span>
+        <span class="ob-count-label">fırsat seni bekliyor</span>
+      </div>
+      <p class="ob-count-sub">Kadıköy ve çevresinde</p>
+    </div>
+    <div class="ob-preview-cards">
+      ${jobs.slice(0,3).map(j => `
+        <div class="ob-preview-card" onclick="finishOnboarding();openJob(${j.id},'home')">
+          <span class="ob-prev-score ${j.matchScore>=85?"score-green":"score-blue"}">${j.matchScore}%</span>
+          <span class="ob-prev-init">${j.initials}</span>
+          <span class="ob-prev-title">${j.company}</span>
+          <span class="ob-prev-dist">📍 ${j.distance} km</span>
+        </div>`).join("")}
+    </div>
+    <div class="ob-sticky-bottom ob-success-actions" style="border-top:none">
+      <button class="btn btn-primary btn-full ob-btn ob-btn-pulse" onclick="finishOnboarding()">
+        Fırsatları Keşfet →
+      </button>
+    </div>
+  </div>`;
+}
+
+/* ─── ONBOARDING HELPERS ────────────────────────────────────────── */
+
+function requestLocationPermission() {
+  if (!navigator.geolocation) { go("onboarding-type"); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      if (window.MW?.Location) {
+        window.MW.Location.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      }
+      go("onboarding-type");
+    },
+    () => go("onboarding-type"),
+    { timeout: 8000 }
+  );
+}
+
+function selectUserType(type) {
+  state.onboarding.userType = type;
+  render();
+  setTimeout(() => go("onboarding-categories"), 350);
+}
+
+function toggleCategory(label) {
+  const cats = state.onboarding.categories;
+  const idx = cats.indexOf(label);
+  if (idx >= 0) cats.splice(idx, 1);
+  else cats.push(label);
+  const items = document.querySelectorAll(".ob-cat-item");
+  items.forEach(item => {
+    const lbl = item.querySelector(".ob-cat-label")?.textContent;
+    if (lbl !== label) return;
+    const active = cats.includes(label);
+    item.classList.toggle("selected", active);
+    const existing = item.querySelector(".ob-cat-check");
+    if (active && !existing) {
+      const d = document.createElement("div");
+      d.className = "ob-cat-check"; d.textContent = "✓";
+      item.appendChild(d);
+    } else if (!active && existing) {
+      existing.remove();
+    }
+  });
+  const countEl = document.querySelector(".ob-count");
+  if (countEl) countEl.textContent = cats.length > 0 ? `${cats.length} kategori seçildi` : "Kategori seç";
+  const btn = document.querySelector(".ob-sticky-bottom .ob-btn");
+  if (btn) { btn.disabled = cats.length === 0; btn.classList.toggle("disabled", cats.length === 0); }
+}
+
+function updateObDistance(val) {
+  state.onboarding.distance = +val;
+  const slider = document.getElementById("ob-dist-slider");
+  const valEl = document.getElementById("ob-dist-val");
+  if (slider) slider.value = val;
+  if (valEl) valEl.textContent = `${val} km`;
+  const chips = document.querySelectorAll("#ob-dist-slider ~ .ob-quick-chips .ob-chip, .ob-quick-chips .ob-chip");
+  // simpler: re-evaluate all chips in first pref section
+  document.querySelectorAll(".ob-pref-section:first-child .ob-chip").forEach((c,i) => {
+    const v = [1,3,5,10][i];
+    if (v !== undefined) c.classList.toggle("active", v == val);
+  });
+}
+
+function toggleObWorkType(type) {
+  const wt = state.onboarding.workTypes;
+  const idx = wt.indexOf(type);
+  if (idx >= 0 && wt.length > 1) wt.splice(idx, 1);
+  else if (idx < 0) wt.push(type);
+  document.querySelectorAll("#ob-work-chips .ob-chip").forEach(c => {
+    c.classList.toggle("active", wt.includes(c.textContent.trim()));
+  });
+}
+
+function updateObSalary(val) {
+  state.onboarding.minSalary = +val;
+  const valEl = document.getElementById("ob-sal-val");
+  if (valEl) valEl.textContent = `₺${val} ve üzeri`;
+}
+
+function updateObAccountBtn() {
+  const btn = document.getElementById("ob-account-btn");
+  if (!btn) return;
+  const hasName = state.onboarding.name.trim().length > 1;
+  const hasPhone = state.onboarding.phone.replace(/\D/g,"").length >= 10;
+  btn.disabled = !(hasName && hasPhone);
+}
+
+let _otpResendTimer = null;
+function startOtpTimer() {
+  let secs = 60;
+  const timerEl = document.getElementById("ob-resend-timer");
+  const btn = document.getElementById("ob-resend");
+  _otpResendTimer = setInterval(() => {
+    secs--;
+    if (timerEl) timerEl.textContent = `${secs}s`;
+    if (secs <= 0) {
+      clearInterval(_otpResendTimer);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `Kodu almadım → <u>Yeniden gönder</u>`;
+      }
+    }
+  }, 1000);
+}
+
+function onOtpInput(el, idx) {
+  el.value = el.value.replace(/\D/g,"");
+  if (el.value && idx < 3) document.getElementById(`otp${idx+1}`)?.focus();
+  // check complete
+  const code = [0,1,2,3].map(i => document.getElementById(`otp${i}`)?.value || "").join("");
+  if (code.length === 4) {
+    const fb = document.getElementById("ob-otp-feedback");
+    if (fb) { fb.textContent = "✓ Doğrulandı"; fb.className = "ob-otp-feedback ob-otp-success"; }
+    setTimeout(() => go("onboarding-success"), 600);
+  }
+}
+
+function onOtpKey(e, idx) {
+  if (e.key === "Backspace" && !e.target.value && idx > 0) {
+    document.getElementById(`otp${idx-1}`)?.focus();
+  }
+}
+
+function finishOnboarding() {
+  localStorage.setItem("mw_onboarding_done", "1");
+  if (state.onboarding.name.trim()) {
+    user.name = state.onboarding.name.trim();
+    user.short = user.name.split(" ")[0];
+    user.initials = user.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  }
+  go("home");
+}
+
+function resetOnboarding() {
+  localStorage.removeItem("mw_onboarding_done");
+  state.onboarding = { userType:null, categories:[], distance:5, workTypes:["Yarı zamanlı"], minSalary:550, name:"", phone:"" };
+  go("onboarding-splash");
+}
+
 /* ─── ROUTER MAP ─────────────────────────────────────────────────── */
 const routes = {
+  "onboarding-splash":     renderOnboardingSplash,
+  "onboarding-welcome":    renderOnboardingWelcome,
+  "onboarding-location":   renderOnboardingLocation,
+  "onboarding-type":       renderOnboardingType,
+  "onboarding-categories": renderOnboardingCategories,
+  "onboarding-prefs":      renderOnboardingPrefs,
+  "onboarding-account":    renderOnboardingAccount,
+  "onboarding-otp":        renderOnboardingOTP,
+  "onboarding-success":    renderOnboardingSuccess,
   auth:          renderAuth,
   home:          renderHome,
   nearby:        renderNearby,
@@ -1357,6 +1827,12 @@ function render() {
   }
   if (route === "messages") {
     requestAnimationFrame(() => loadMatchesList());
+  }
+  if (route === "onboarding-otp") {
+    requestAnimationFrame(() => {
+      document.getElementById("otp0")?.focus();
+      startOtpTimer();
+    });
   }
   if (route === "nearby") {
     // Leaflet haritayı başlat (DOM hazır olduğunda)
@@ -1890,11 +2366,14 @@ function demoLogin() {
 window.addEventListener("hashchange", render);
 window.addEventListener("DOMContentLoaded", async () => {
   if (localStorage.getItem("mw_theme") === "light") document.body.classList.add("light-mode");
+  const onboardingDone = localStorage.getItem("mw_onboarding_done");
   if (window.MW?.Auth.isLoggedIn()) {
     await loadJobsFromAPI();
     if (!location.hash || location.hash === "#auth") location.hash = "home";
+  } else if (!onboardingDone) {
+    location.hash = "onboarding-splash";
   } else {
-    if (!location.hash) location.hash = "auth";
+    if (!location.hash || location.hash === "#onboarding-splash") location.hash = "auth";
   }
   render();
   if ("serviceWorker" in navigator)
@@ -1912,4 +2391,8 @@ Object.assign(window, {
   markAllRead, markNotifRead, toggleNotifPref,
   togglePrefType, setPrefRadius, filterSwipeDeck,
   openInterview, refreshLocation,
+  requestLocationPermission, selectUserType, toggleCategory,
+  updateObDistance, toggleObWorkType, updateObSalary,
+  updateObAccountBtn, onOtpInput, onOtpKey,
+  finishOnboarding, resetOnboarding,
 });
