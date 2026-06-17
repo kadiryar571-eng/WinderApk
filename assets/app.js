@@ -1097,7 +1097,10 @@ function discoverCard(job, slot) {
         <span class="dc-type-badge">${job.type}</span>
       </div>
 
-      <p class="dc-reason">✓ "${DC_REASONS[job.id] || "Profiline uygun bir fırsat"}"</p>
+      <div class="dc-match-strip">
+        <p class="dc-reason">✓ "${DC_REASONS[job.id] || "Profiline uygun bir fırsat"}"</p>
+        ${mxMiniHtml(job)}
+      </div>
 
       <div class="dc-kpis">
         <div class="dc-kpi"><span class="dc-kv" style="color:var(--success)">${job.sal.cur}${job.sal.min}–${job.sal.max}</span><span class="dc-kl">/${job.sal.per}</span></div>
@@ -1369,6 +1372,145 @@ function commitDetailInterest() {
   go("match");
 }
 
+/* ─── MATCH VISUALIZATION SYSTEM ─────────────────────────────── */
+function computeMatchDimensions(job) {
+  const distScore = job.distance <= 0.6 ? 100 :
+                    job.distance <= 1.2 ? 95  :
+                    job.distance <= 2.0 ? 85  :
+                    job.distance <= 3.0 ? 72  : 58;
+
+  const matched    = job.req.filter(r => reqMatchesUser(r)).length;
+  const skillScore = Math.min(100, Math.round(
+    (matched / Math.max(1, job.req.length)) * 60 + job.matchScore * 0.4
+  ));
+
+  const sched = job.schedule.toLowerCase();
+  const avail = user.availability.toLowerCase();
+  let schedScore = 65;
+  if ((sched.includes("cumartesi") || sched.includes("hafta sonu")) &&
+      (avail.includes("hafta sonu") || avail.includes("cumartesi"))) schedScore = 96;
+  else if (sched.includes("esnek"))                                    schedScore = 88;
+  else if (sched.includes("hafta içi") && avail.includes("akşam"))    schedScore = 85;
+
+  let salScore = 70;
+  const uMin = 500, uMax = 700;
+  if (job.sal.min >= uMin && job.sal.max <= uMax + 100)  salScore = 93;
+  else if (job.sal.max >= uMin)                           salScore = 80;
+  else                                                    salScore = 58;
+
+  const interests = state.pfInterests || ["Yeme-İçme","Perakende","Hizmet"];
+  const ctx = [job.title, job.company, ...(job.tags || [])].join(" ").toLowerCase();
+  const imap = {
+    "Yeme-İçme": ["barista","kafe","cafe","garson","restoran","aşçı","lezzet","masa","lumiere"],
+    "Perakende": ["satış","mağaza","kasa","market","teknomarket","moda","plus"],
+    "Hizmet":    ["çağrı","güvenlik","kurye","hizmet","call","safe","hızlı"],
+  };
+  let prefScore = 65;
+  for (const int of interests) {
+    if ((imap[int] || []).some(k => ctx.includes(k))) { prefScore = 92; break; }
+  }
+
+  return {
+    distance:   { score:distScore, icon:"📍", label:"Konum Uyumu",
+      note: distScore >= 90
+        ? `✓ ${job.distance} km — Yürüme mesafesinde`
+        : `${job.distance} km · ${job.travel.walk} dk yürüyüş` },
+    skills:     { score:skillScore, icon:"🎯", label:"Beceri Uyumu",
+      note: matched >= 2
+        ? `✓ ${matched}/${job.req.length} gereksinim profilinde var`
+        : `${matched}/${job.req.length} beceri eşleşiyor` },
+    schedule:   { score:schedScore, icon:"📅", label:"Program Uyumu",
+      note: schedScore >= 88
+        ? "✓ Müsaitliğin bu ilanla birebir uyuşuyor"
+        : "Kısmi uyum — programını gözden geçir" },
+    salary:     { score:salScore, icon:"₺", label:"Ücret Uyumu",
+      note: salScore >= 85
+        ? `✓ ₺${job.sal.min}–${job.sal.max}/gün beklentine uygun`
+        : `₺${job.sal.min}–${job.sal.max}/gün — yakın beklenti` },
+    preference: { score:prefScore, icon:"✦", label:"Tercih Uyumu",
+      note: prefScore >= 85
+        ? "✓ İlgi alanlarınla örtüşüyor"
+        : "Yeni bir sektör keşfetme fırsatı" },
+  };
+}
+
+function mxGrade(score) {
+  if (score >= 90) return { label:"Mükemmel Uyum", sub:"Seninle çok uyumlu" };
+  if (score >= 80) return { label:"Güçlü Uyum",    sub:"Çoğu boyut eşleşiyor" };
+  if (score >= 70) return { label:"İyi Uyum",       sub:"Temel gereksinimler karşılanıyor" };
+  return              { label:"Kısmi Uyum",      sub:"Bazı farklılıklar var" };
+}
+
+function mxDimColor(s) {
+  return s >= 85 ? "#22c55e" : s >= 65 ? "#6C4EFF" : "#f59e0b";
+}
+
+function mxDimHtml(dim, delayS) {
+  const c     = mxDimColor(dim.score);
+  const isGood = dim.score >= 80;
+  return `
+    <div class="mx-dim">
+      <div class="mx-dim-row">
+        <span class="mx-dim-icon">${dim.icon}</span>
+        <span class="mx-dim-label">${dim.label}</span>
+        <div class="mx-dim-track">
+          <div class="mx-dim-fill"
+            style="background:${c};--mx-w:${dim.score}%;--mx-delay:${delayS.toFixed(2)}s">
+          </div>
+        </div>
+        <span class="mx-dim-pct" style="color:${c}">${dim.score}%</span>
+      </div>
+      <p class="mx-dim-note${isGood ? " mx-good" : " mx-warn"}">${dim.note}</p>
+    </div>`;
+}
+
+function mxMiniHtml(job) {
+  const dims = computeMatchDimensions(job);
+  return `<div class="mx-mini">
+    ${Object.values(dims).map(d => {
+      const c = mxDimColor(d.score);
+      return `<div class="mx-mini-bar" title="${d.label} ${d.score}%">
+        <div class="mx-mini-fill" style="height:${d.score}%;background:${c}"></div>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function mxPanelHtml(job, sColor) {
+  const dims  = computeMatchDimensions(job);
+  const grade = mxGrade(job.matchScore);
+  const ringOff2 = Math.round(151 * (1 - job.matchScore / 100));
+  return `
+    <div class="mx-panel">
+      <div class="mx-head">
+        <div class="mx-head-ring">
+          <svg class="mx-ring-svg" viewBox="0 0 56 56">
+            <circle class="mx-ring-bg" cx="28" cy="28" r="24"/>
+            <circle class="mx-ring-arc" cx="28" cy="28" r="24"
+              style="stroke:${sColor};--mx-ring-off:${ringOff2}"/>
+          </svg>
+          <div class="mx-ring-val" style="color:${sColor}">${job.matchScore}%</div>
+        </div>
+        <div class="mx-head-info">
+          <div class="mx-grade-label" style="color:${sColor}">${grade.label}</div>
+          <div class="mx-grade-sub">${grade.sub}</div>
+          <div class="mx-overall-track">
+            <div class="mx-overall-fill"
+              style="background:${sColor};--mx-w:${job.matchScore}%;--mx-delay:0s">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mx-why">Neden ${job.matchScore}% — 5 boyut</div>
+      <div class="mx-dims">
+        ${Object.values(dims).map((d, i) => mxDimHtml(d, 0.12 + i * 0.09)).join("")}
+      </div>
+      <div class="mx-edu">
+        💡 Konum · Beceri · Program · Ücret · Tercih boyutlarının ortalaması
+      </div>
+    </div>`;
+}
+
 function renderJobDetail() {
   const job      = jobs.find(j => String(j.id) === String(state.detailJobId)) || jobs[0];
   const back     = state.detailSource === "discover" ? "discover" :
@@ -1429,15 +1571,7 @@ function renderJobDetail() {
 
     <div class="jd-body">
 
-      <div class="jd-card jd-match-card">
-        <div class="jd-match-left">
-          <div class="jd-score-big" style="color:${sColor}">${job.matchScore}<span>%</span></div>
-          <div class="jd-score-lbl">Uyum Skoru</div>
-        </div>
-        <div class="jd-match-right">
-          ${reasons.map(r => `<div class="jd-mr">✓ ${r}</div>`).join("")}
-        </div>
-      </div>
+      ${mxPanelHtml(job, sColor)}
 
       <div class="jd-sec-hdr">Mesafe & Ulaşım</div>
       <div class="jd-card">
